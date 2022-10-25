@@ -52,8 +52,8 @@ do
 		"${path}"|"${path}"/*) ;;
 		*) continue;;
 		esac
-		: ${best_path="${path}"}
-		: ${best_version="${version}"}
+		: "${best_path="${path}"}"
+		: "${best_version="${version}"}"
 		# Is this path more specific than the current best?
 		case "${path}" in
 		"${best_path}"/*)
