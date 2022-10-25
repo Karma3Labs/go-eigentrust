@@ -9,6 +9,11 @@ case "${0}" in
 *) progdir=.;;
 esac
 
+msg() { case $# in [1-9]*) echo "${progname}: $*" >&2;; esac; }
+err() { local status="$1"; shift; msg "$@"; exit "${status}"; }
+ex_usage() { err 64 "$@"; }
+ex_unavailable() { err 69 "$@"; }
+
 unset -v tmpdir
 sigs="0 1 2 15"  # EXIT HUP INT TERM
 trapfunc() {
@@ -20,13 +25,13 @@ unset -v sig; for sig in ${sigs}; do trap "trapfunc ${sig}" "${sig}"; done
 tmpdir=$(mktemp -d)
 
 unset -v jq
-jq=$(which jq) || { echo "${progname}: jq not found" >&2; exit 69; }
+jq=$(which jq) || { ex_unavailable "jq not found"; }
 
 cd "${progdir}"
 while [ ! -f go.mod ]
 do
 	case "$(pwd)" in
-	/) echo "${progname}: go.mod not found" >&2; exit 69;;
+	/) ex_unavailable "go.mod not found";;
 	esac
 	cd ..
 done
@@ -58,12 +63,12 @@ do
 	done < "${tmpdir}/gomod.txt"
 	case "${best_path-}" in
 	"")
-		echo "${progname}: no module provides package ${pkg}" >&2
+		msg "no module provides package ${pkg}"
 		ok=false
 		continue
 		;;
 	esac
-	echo "${progname}: ${pkg} is provided by ${best_path}@${best_version}"
+	msg "${pkg} is provided by ${best_path}@${best_version}"
 	go get "${pkg}@${best_version}"
 done
 "${ok}" && exit 0 || exit 1
