@@ -14,6 +14,21 @@ err() { local status="$1"; shift; msg "$@"; exit "${status}"; }
 ex_usage() { err 64 "$@"; }
 ex_unavailable() { err 69 "$@"; }
 
+unset -v install
+install=false
+
+unset -v opt
+OPTIND=1
+while getopts :i opt
+do
+  case "${opt}" in
+  '?') ex_usage "unrecognized option -${OPTARG}";;
+  ':') ex_usage "missing argument for -${OPTARG}";;
+  i) install=true;;
+  esac
+done
+shift $((OPTIND - 1))
+
 unset -v tmpdir
 sigs="0 1 2 15"  # EXIT HUP INT TERM
 trapfunc() {
@@ -69,6 +84,11 @@ do
 		;;
 	esac
 	msg "${pkg} is provided by ${best_path}@${best_version}"
-	go get "${pkg}@${best_version}"
+	if "${install}"
+	then
+		go install "${pkg}@${best_version}"
+	else
+		go get "${pkg}@${best_version}"
+	fi
 done
 "${ok}" && exit 0 || exit 1

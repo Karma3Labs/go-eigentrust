@@ -10,4 +10,4 @@ case "${0}" in
 esac
 
 sed -n 's/^	_ "\([^"]*\)"$/\1/p' "${progdir}/../tools/tools.go" | \
-	xargs "${progdir}/goget.sh"
+	xargs "${progdir}/goget.sh" -i
