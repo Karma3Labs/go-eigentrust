@@ -3,6 +3,15 @@
     <GoCodeStyleSettings>
       <option name="IMPORT_SORTING" value="GOIMPORTS" />
       <option name="LOCAL_PACKAGE_PREFIXES" />
+      <option name="WRAP_COMP_LIT" value="1" />
+      <option name="WRAP_FUNC_PARAMS" value="1" />
+      <option name="WRAP_FUNC_RESULT" value="1" />
     </GoCodeStyleSettings>
+    <codeStyleSettings language="go">
+      <option name="RIGHT_MARGIN" value="80" />
+      <option name="CALL_PARAMETERS_WRAP" value="1" />
+      <option name="CALL_PARAMETERS_LPAREN_ON_NEXT_LINE" value="false" />
+      <option name="CALL_PARAMETERS_RPAREN_ON_NEXT_LINE" value="false" />
+    </codeStyleSettings>
   </code_scheme>
 </component>
