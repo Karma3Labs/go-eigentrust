@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EigenTrust Engine</title>
+    <style>
+        body {
+            color: #404040;
+            background: white;
+        }
+
+        body, input, button {
+            font-family: "Fira Sans Condensed", sans-serif;
+        }
+
+        button {
+            background-color: silver;
+            border: none;
+            color: black;
+            text-align: center;
+            display: inline;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            border: solid silver 2pt;
+        }
+
+        th {
+            background: #f0f0f0;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th, td {
+            vertical-align: baseline;
+        }
+
+        var:before {
+            content: "<";
+        }
+
+        var {
+            font-weight: bold;
+        }
+
+        .desc {
+            font-size: 70%;
+            color: silver;
+        }
+
+        var:after {
+            content: ">";
+        }
+    </style>
+</head>
+<body onload="document.getElementById('hunchPercentValue').textContent = document.getElementById('hunchPercent').value">
+<h1>EigenTrust Engine</h1>
+<form method="post" action="calculate" enctype="multipart/form-data">
+    <table>
+        <tr>
+            <th>
+                <label for="peerNamesFile">Peer Names File:&nbsp;</label>
+            </th>
+            <td>
+                <input type="file" id="peerNamesFile" name="peerNamesFile"/>
+                <div class="desc">
+                    <p>
+                        A CSV file of peer names, one name per line.
+                    </p>
+                    <p>
+                        If provided,
+                        both the <b>Local Trust File</b> and the <b>Personal Trust File</b> below
+                        use the peer names as the peer key.
+                        Otherwise, they use peer index (0-based) as the key.
+                    </p>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <label for="localTrustFile">Local Trust File:&nbsp;</label>
+            </th>
+            <td>
+                <input type="file" id="localTrustFile" name="localTrustFile"/>
+                <div class="desc">
+                    <p>
+                        A CSV file of local trust arcs,
+                        with records in "<var>from</var>,<var>to</var>,<var>value</var>"
+                        or "<var>from</var>,<var>to</var>" format.
+                    </p>
+                    <p>
+                        <var>from</var> and <var>to</var> are peer names/indices.
+                    </p>
+                    <p>
+                        <var>value</var> is the trust level.
+                        It must be non-negative, and is assumed to be 1.0 if omitted.
+                    </p>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <label for="preTrustFile">Personal Trust File:&nbsp;</label>
+            </th>
+            <td>
+                <input type="file" id="preTrustFile" name="preTrustFile"/>
+                <div class="desc">
+                    <p>
+                        A CSV file of personally trusted peers and their trust levels,
+                        with records in "<var>peer</var>,<var>value</var>"
+                        or "<var>peer</var>" format.
+                    </p>
+                    <p>
+                        <var>peer</var> is a peer name/index.
+                    </p>
+                    <p>
+                        <var>value</var> is the trust level.
+                        It must be non-negative, and is assumed to be 1.0 if omitted.
+                    </p>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <th>
+                <label for="hunchPercent">Personal Confidence:&nbsp;</label>
+            </th>
+            <td>
+                <span id="hunchPercentValue"></span>%<br/>
+                <input type="range" id="hunchPercent" name="hunchPercent" min="0" max="100" value="10"
+                       oninput="document.getElementById('hunchPercentValue').textContent = this.value"/>
+                <div class="desc">
+                    <p>How strong the personal trust is.</p>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <th/>
+            <td>
+                <input type="submit"/>
+            </td>
+        </tr>
+    </table>
+</form>
+
+</body>
+</html>

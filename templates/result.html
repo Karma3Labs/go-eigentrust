@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EigenTrust Calculation Result</title>
+    <style>
+        body {
+            color: #404040;
+            background: white;
+        }
+
+        body, input, button {
+            font-family: "Fira Sans Condensed", sans-serif;
+        }
+
+        button {
+            background-color: silver;
+            border: none;
+            color: black;
+            text-align: center;
+            display: inline;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            border: solid silver 2pt;
+        }
+
+        th {
+            background: #f0f0f0;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th, td {
+            vertical-align: baseline;
+        }
+
+        var:before {
+            content: "<";
+        }
+
+        var {
+            font-weight: bold;
+        }
+
+        var:after {
+            content: ">";
+        }
+    </style>
+</head>
+<body>
+<h1>EigenTrust Calculation Result</h1>
+<table>
+    <tr>
+        <th>Peer Names File:&nbsp;</th>
+        <td>
+            {{if .PeerNamesFileName}}
+            {{.PeerNamesFileName | html}}
+            {{else}}
+            <span style="color: silver">&lt;none&gt;</span>
+            {{end}}
+            ({{.Entries | len}} peers)
+        </td>
+    </tr>
+    <tr>
+        <th>Local Trust File:&nbsp;</th>
+        <td>
+            {{.LocalTrustFileName | html}}
+            ({{.NumLocalTrusts}} arcs, {{.LocalTrustDensityPercent | printf "%f" }}% full)
+        </td>
+    </tr>
+    <tr>
+        <th>Personal Trust File:&nbsp;</th>
+        <td>{{.PreTrustFileName | html}}</td>
+    </tr>
+    <tr>
+        <th>Personal Confidence:&nbsp;</th>
+        <td>{{.HunchPercent | html}}%</td>
+    </tr>
+</table>
+<p>Displayed in <b>bold</b> are personally trusted peers.</p>
+<table>
+    <tr>
+        <th>Rank</th>
+        <th>Peer</th>
+        <th>Score</th>
+        <th>log<sub>10</sub>Score</th>
+    </tr>
+    {{$preTrusted := .PreTrusted}}
+    {{range $rank, $entry := .Entries}}
+    <tr
+            {{if index $preTrusted $entry.Index}} style="font-weight: bold" {{end}}>
+        <td>{{ $rank | html }}</td>
+        <td>{{ $entry.Name | html }}</td>
+        <td>{{ $entry.Score | html }}</td>
+        <td>{{ $entry.ScoreLog | html }}</td>
+    </tr>
+    {{end}}
+</table>
+
+</body>
+</html>
