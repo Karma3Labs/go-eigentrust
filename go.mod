@@ -1,4 +1,4 @@
-module go-eigentrust
+module github.com/eigentrust-io/go-eigentrust
 
 go 1.19
 
@@ -6,6 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/golangci/golangci-lint v1.50.1
 	github.com/pkg/errors v0.9.1
+	github.com/rs/zerolog v1.28.0
 	golang.org/x/tools v0.2.0
 	gonum.org/v1/gonum v0.12.0
 )
