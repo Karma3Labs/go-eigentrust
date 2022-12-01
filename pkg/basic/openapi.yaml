@@ -1,0 +1,118 @@
+openapi: 3.1.0
+info:
+  title: EigenTrust Basic API
+  description: EigenTrust Basic API
+  version: 1.0.0
+servers:
+  - url: 'https://api.eigentrust.io/basic/v1/'
+paths:
+  /compute:
+    post:
+      operationId: compute
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ComputeRequest"
+      responses:
+        "200":
+          description: Successfully calculated the EigenTrust score.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/TrustVectorRef"
+components:
+  schemas:
+    ComputeRequest:
+      type: object
+      required:
+        - localTrust
+      properties:
+        localTrust:
+          $ref: "#/components/schemas/LocalTrustRef"
+        preTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        alpha:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          default: 0.5
+        epsilon:
+          type: number
+          format: double
+          minimum: 0  # should really be exclusiveMinimum
+          maximum: 1
+    LocalTrustRef:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/InlineLocalTrust"
+    InlineLocalTrust:
+      type: object
+      required:
+        - scheme
+        - size
+        - entries
+      properties:
+        scheme:
+          type: string
+          enum: ["inline"]
+        size:
+          type: integer
+          minimum: 1
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/InlineLocalTrustEntry"
+    InlineLocalTrustEntry:
+      type: object
+      required:
+        - i
+        - j
+        - v
+      properties:
+        i:
+          type: integer
+          minimum: 0
+        j:
+          type: integer
+          minimum: 0
+        v:
+          type: number
+          format: double
+          minimum: 0  # should really be exclusiveMinimum
+    TrustVectorRef:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/InlineTrustVector"
+    InlineTrustVector:
+      type: object
+      required:
+        - scheme
+        - size
+        - entries
+      properties:
+        scheme:
+          type: string
+          enum: ["inline"]
+        size:
+          type: integer
+          minimum: 1
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/InlineTrustVectorEntry"
+    InlineTrustVectorEntry:
+      type: object
+      required:
+        - i
+        - v
+      properties:
+        i:
+          type: integer
+          minimum: 0
+        v:
+          type: number
+          format: double
+          minimum: 0  # should really be exclusiveMinimum
