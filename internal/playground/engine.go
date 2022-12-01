@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/eigentrust-io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/basic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"

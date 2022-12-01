@@ -1,4 +1,4 @@
-module github.com/eigentrust-io/go-eigentrust
+module k3l.io/go-eigentrust
 
 go 1.19
 

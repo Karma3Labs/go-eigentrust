@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/eigentrust-io/go-eigentrust/internal/playground"
 	"github.com/gin-gonic/gin"
+	"k3l.io/go-eigentrust/internal/playground"
 )
 
 func main() {
