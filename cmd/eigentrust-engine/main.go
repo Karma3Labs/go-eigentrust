@@ -21,7 +21,8 @@ func main() {
 	basic.SetLogger(logger)
 	e := echo.New()
 	server := basic.StrictServerImpl{}
-	basic.RegisterHandlers(e, basic.NewStrictHandler(&server, nil))
+	basic.RegisterHandlersWithBaseURL(e, basic.NewStrictHandler(&server, nil),
+		"/basic/v1")
 	err := e.Start(*listenAddress)
 	if err != nil {
 		logger.Err(err).Msg("server did not shut down gracefully")
