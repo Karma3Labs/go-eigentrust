@@ -18,9 +18,8 @@ var (
 func main() {
 	flag.Parse()
 	logger = zerolog.New(os.Stderr)
-	basic.SetLogger(logger)
 	e := echo.New()
-	server := basic.StrictServerImpl{}
+	server := basic.StrictServerImpl{Logger: logger}
 	basic.RegisterHandlersWithBaseURL(e, basic.NewStrictHandler(&server, nil),
 		"/basic/v1")
 	err := e.Start(*listenAddress)

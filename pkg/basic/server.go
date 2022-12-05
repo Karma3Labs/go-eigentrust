@@ -4,9 +4,12 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
-type StrictServerImpl struct{}
+type StrictServerImpl struct {
+	Logger zerolog.Logger
+}
 
 func (server StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
