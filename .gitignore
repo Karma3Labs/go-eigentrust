@@ -77,3 +77,6 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 # --- END https://raw.githubusercontent.com/github/gitignore/cdde85a36ecb48a162385829d198a7a5bf429a63/Global/JetBrains.gitignore ---
+
+# Python virtual environment
+/venv
