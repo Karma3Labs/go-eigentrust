@@ -133,9 +133,9 @@ func calculate(gc *gin.Context) error {
 		// grow the smaller one
 		switch {
 		case localTrust.Dim() < preTrust.Len():
-			localTrust.Grow(preTrust.Len() - localTrust.Dim())
+			localTrust = localTrust.Grow(preTrust.Len() - localTrust.Dim())
 		case preTrust.Len() < localTrust.Dim():
-			preTrust.Grow(localTrust.Dim() - preTrust.Len())
+			preTrust = preTrust.Grow(localTrust.Dim() - preTrust.Len())
 		}
 	}
 	p := preTrust.Canonicalize()

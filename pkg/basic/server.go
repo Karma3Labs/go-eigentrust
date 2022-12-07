@@ -26,8 +26,7 @@ func (server StrictServerImpl) Compute(
 	}
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
-		preTrust = NewEmptyTrustVector()
-		preTrust.Grow(localTrust.Dim())
+		preTrust = NewEmptyTrustVector().Grow(localTrust.Dim())
 	} else if preTrust, err = loadTrustVector(request.Body.PreTrust); err != nil {
 		return nil, errors.Wrap(err, "cannot load pre-trust")
 	}
@@ -84,8 +83,7 @@ func loadLocalTrust(ref *LocalTrustRef) (LocalTrust, error) {
 }
 
 func loadInlineLocalTrust(inline *InlineLocalTrust) (LocalTrust, error) {
-	lt := NewEmptyLocalTrust()
-	lt.Grow(inline.Size)
+	lt := NewEmptyLocalTrust().Grow(inline.Size)
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
 			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
@@ -112,8 +110,7 @@ func loadTrustVector(ref *TrustVectorRef) (TrustVector, error) {
 }
 
 func loadInlineTrustVector(inline *InlineTrustVector) (TrustVector, error) {
-	lt := NewEmptyTrustVector()
-	lt.Grow(inline.Size)
+	lt := NewEmptyTrustVector().Grow(inline.Size)
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
 			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
