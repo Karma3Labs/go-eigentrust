@@ -11,7 +11,7 @@ type StrictServerImpl struct {
 	Logger zerolog.Logger
 }
 
-func (server StrictServerImpl) Compute(
+func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
 	var (
