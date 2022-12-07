@@ -46,7 +46,7 @@ func (server *StrictServerImpl) Compute(
 		epsilon    float64
 		err        error
 	)
-	if localTrust, err = loadLocalTrust(&request.Body.LocalTrust); err != nil {
+	if localTrust, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
 		return wrapIn400(err, "cannot load local trust"), nil
 	}
 	if request.Body.PreTrust == nil {
@@ -100,14 +100,18 @@ func (server *StrictServerImpl) Compute(
 	return Compute200JSONResponse(tv), nil
 }
 
-func loadLocalTrust(ref *LocalTrustRef) (LocalTrust, error) {
+func (server *StrictServerImpl) loadLocalTrust(
+	ref *LocalTrustRef,
+) (LocalTrust, error) {
 	if inline, err := ref.AsInlineLocalTrust(); err == nil {
-		return loadInlineLocalTrust(&inline)
+		return server.loadInlineLocalTrust(&inline)
 	}
 	return nil, errors.New("unknown local trust ref type")
 }
 
-func loadInlineLocalTrust(inline *InlineLocalTrust) (LocalTrust, error) {
+func (server *StrictServerImpl) loadInlineLocalTrust(
+	inline *InlineLocalTrust,
+) (LocalTrust, error) {
 	lt := NewEmptyLocalTrust().Grow(inline.Size)
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
