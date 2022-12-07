@@ -112,6 +112,9 @@ func (server *StrictServerImpl) loadLocalTrust(
 func (server *StrictServerImpl) loadInlineLocalTrust(
 	inline *InlineLocalTrust,
 ) (LocalTrust, error) {
+	if inline.Size <= 0 {
+		return nil, errors.Errorf("invalid size=%#v", inline.Size)
+	}
 	lt := NewEmptyLocalTrust().Grow(inline.Size)
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
