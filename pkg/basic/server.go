@@ -2,6 +2,7 @@ package basic
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -9,6 +10,30 @@ import (
 
 type StrictServerImpl struct {
 	Logger zerolog.Logger
+}
+
+func make400(message string) (resp Compute400JSONResponse) {
+	resp.Message = message
+	return
+}
+
+func format400(format string, v ...interface{}) (resp Compute400JSONResponse) {
+	resp.Message = fmt.Sprintf(format, v...)
+	return
+}
+
+func errorTo400(err error) (resp Compute400JSONResponse) {
+	return make400(err.Error())
+}
+
+func wrapIn400(err error, message string) (resp Compute400JSONResponse) {
+	return errorTo400(errors.Wrap(err, message))
+}
+
+func wrapfIn400(
+	err error, format string, v ...interface{},
+) (resp Compute400JSONResponse) {
+	return errorTo400(errors.Wrapf(err, format, v...))
 }
 
 func (server *StrictServerImpl) Compute(
@@ -22,24 +47,24 @@ func (server *StrictServerImpl) Compute(
 		err        error
 	)
 	if localTrust, err = loadLocalTrust(&request.Body.LocalTrust); err != nil {
-		return nil, errors.Wrap(err, "cannot load local trust")
+		return wrapIn400(err, "cannot load local trust"), nil
 	}
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		preTrust = NewEmptyTrustVector().Grow(localTrust.Dim())
 	} else if preTrust, err = loadTrustVector(request.Body.PreTrust); err != nil {
-		return nil, errors.Wrap(err, "cannot load pre-trust")
+		return wrapIn400(err, "cannot load pre-trust"), nil
 	}
 	if localTrust.Dim() != preTrust.Len() {
-		return nil, errors.Errorf("local trust size %d != pre-trust size %d",
-			localTrust.Dim(), preTrust.Len())
+		return format400("local trust size %d != pre-trust size %d",
+			localTrust.Dim(), preTrust.Len()), nil
 	}
 	if request.Body.Alpha == nil {
 		alpha = 0.5
 	} else {
 		alpha = *request.Body.Alpha
 		if alpha < 0 || alpha > 1 {
-			return nil, errors.Errorf("alpha=%f out of range [0..1]", alpha)
+			return format400("alpha=%f out of range [0..1]", alpha), nil
 		}
 	}
 	if request.Body.Epsilon == nil {
@@ -47,7 +72,7 @@ func (server *StrictServerImpl) Compute(
 	} else {
 		epsilon = *request.Body.Epsilon
 		if epsilon <= 0 || epsilon > 1 {
-			return nil, errors.Errorf("epsilon=%f out of range (0..1]", epsilon)
+			return format400("epsilon=%f out of range (0..1]", epsilon), nil
 		}
 	}
 	p := preTrust.Canonicalize()
