@@ -82,6 +82,11 @@ type TrustVectorRef struct {
 	union json.RawMessage
 }
 
+// InvalidRequest defines model for InvalidRequest.
+type InvalidRequest struct {
+	Message string `json:"message"`
+}
+
 // ComputeJSONRequestBody defines body for Compute for application/json ContentType.
 type ComputeJSONRequestBody = ComputeRequest
 
@@ -353,6 +358,9 @@ type ComputeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *TrustVectorRef
+	JSON400      *struct {
+		Message string `json:"message"`
+	}
 }
 
 // Status returns HTTPResponse.Status
@@ -408,6 +416,15 @@ func ParseComputeResponse(rsp *http.Response) (*ComputeResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 
@@ -467,6 +484,10 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 }
 
+type InvalidRequestJSONResponse struct {
+	Message string `json:"message"`
+}
+
 type ComputeRequestObject struct {
 	Body *ComputeJSONRequestBody
 }
@@ -480,6 +501,16 @@ type Compute200JSONResponse TrustVectorRef
 func (response Compute200JSONResponse) VisitComputeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	fmt.Printf("w=%#v\n", w)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type Compute400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response Compute400JSONResponse) VisitComputeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -536,16 +567,17 @@ func (sh *strictHandler) Compute(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/9RVwW7bMAz9lYDb0bCdDbvotg49FCiwoRt2KXpQZLphIUuqRAXLAv/7IDnLHCdB2i2X",
-	"3WSb7/GRj6I3oGznrEHDAcQGglpiJ/Pxk+1cZLzD54iB0xvnrUPPhPm71G4p06HBVkbNIOryQwGt9Z1k",
-	"ENDYuNAIBXTyB3WxAzEvoCMznOsCeO0QBJjYLdBDXwC6QNqaxPkPLNoqqb/5OGh+67EFAW+qP3VW2yKr",
-	"213kHbYJ6jy+CJiDvqNi6zOyL8DjcySPDYj7sYKHnUC7eELFKcuN0WTwdk/mfmvRsN8eibEL5/RMGa8N",
-	"+3VKtc0tvZf5OQNwSJH6dw+UoSOdgT2ZxxxMP3PortvzXRAZxsfU7knlW/4tttgV8pI2DKIPekF7EupD",
-	"CQU8nQ9ZnRiq04M0qYwg5UlEp2sZjcWlPB1R/kemHqj+G1cvYtlxu/YvvtiANfi5BXH/umsG/THyyXJ4",
-	"Jft4ho7QpxrJtHbYu0F5ckxpZcI1PaLJ6NmVDKRmH7/cQAFMrPH05xX6MODnZV3WSb91aKQjEPC+nJc1",
-	"FOAkL7NrWXbkPEDODpsruSqThpsGxO+fBgxOYOAr22T7lTWMJiOkc5pUxlRPYdj3QxPO3YnJL6nfd5x9",
-	"xPwiOGvCMGfv6vpi2Q+2fl9MPPgalcIQ2qj1eqakVlFLxmbGS5yNDAjKeiwTQaII6JMLeT6i1yBgyeyC",
-	"qCrpqMQE4wQryVaLZF21mlfQP/S/AgAA//8SzZYevAcAAA==",
+	"H4sIAAAAAAAC/9RWQW/bOgz+KwbfOxq289520W0teghQYEM37FL0oMh0okKWVIkKlhX+74Ok1HOcZG23",
+	"XnYJZIXk95EfTfoRhOmt0ajJA3sEh94a7TE9LPWWK9ne4ENAT/FGGE2o05Fbq6TgJI2u773R8c6LDfY8",
+	"nqwzFh3JHKhH7/ka45F2FoGBJyf1GoahBIcPQTpsgd2Ohnflk6FZ3aMgGKJli144aSMkMLhUEjUVPv5w",
+	"XchMtnCZbZViZ0KJw6XpbSCcJHPIkSu7SdRb7HhQBKyp3pfQGddzAgatCSuFUELPv8k+9MAWJfRS53Mz",
+	"EtahX6GDoQS0XqpcmD+Ioozg6osLmfO/Djtg8E/9U7Z6n2R9PVreYBddrcMXOSajryjIuOQ5E2XC4FiX",
+	"EpZaSY3XBzQPS4ua3P4oCXv/HJ95xCtNbheh9tjcOZ6ekwNmiFi/W5DJdcLzqdFK8PJ7Mh2rvRiNpCZc",
+	"x3LPMt/H3/uWYyIvKUMmfVQLeUChOaZQwv3zJtszTXW+kWaZSYg4MdD5XCZt8VaaTkL+RaIesf4dVd9E",
+	"stNyHb747BGMxo8dsNvXvWYwnAo+Gw6vjD7toeH0VJe6M3nuTqf7lVyjTt7FBfdSFB8+LaEEkqTw/N9b",
+	"dD77L6qmaiJ/Y1FzK4HB/9WiaqAEy2mTVEu0A6UGsiZPrqhqWmrLNu6YvUFWAj1dmHb3qkX4qxLNVtJw",
+	"qDi5gOlispH/a5o3Qz+a+kcb9nMQAr3vglK7QnAlguKEbUEbLCYCeGEcVrHW7zK9U6hjGvXsq2IYErJH",
+	"F8VLbRWcAgYbIutZXXMrK4xoFNEqaepVVLzeLmoY7oYfAQAA//8LjDMmwggAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

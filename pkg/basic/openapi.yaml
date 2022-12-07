@@ -22,6 +22,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/TrustVectorRef"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
 components:
   schemas:
     ComputeRequest:
@@ -116,3 +118,15 @@ components:
           type: number
           format: double
           minimum: 0  # should really be exclusiveMinimum
+  responses:
+    InvalidRequest:
+      description: Client sent an invalid request.
+      content:
+        "application/json":
+          schema:
+            type: object
+            required:
+              - message
+            properties:
+              message:
+                type: string
