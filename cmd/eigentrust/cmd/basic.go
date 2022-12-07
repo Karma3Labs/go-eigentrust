@@ -24,7 +24,7 @@ var (
 func init() {
 	rootCmd.AddCommand(basicCmd)
 	basicCmd.PersistentFlags().StringVarP(&endpoint, "endpoint", "H",
-		"https://api.eigentrust.io/basic/v1",
+		"https://api.k3l.io/basic/v1",
 		`API endpoint address`)
 	basicCmd.PersistentFlags().BoolVarP(&useLocalEndpoint, "local", "L",
 		false,

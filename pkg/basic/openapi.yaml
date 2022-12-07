@@ -4,7 +4,7 @@ info:
   description: EigenTrust Basic API
   version: 1.0.0
 servers:
-  - url: 'https://api.eigentrust.io/basic/v1/'
+  - url: 'https://api.k3l.io/basic/v1/'
 paths:
   /compute:
     post:
