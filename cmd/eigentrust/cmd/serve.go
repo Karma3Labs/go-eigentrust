@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
 	"k3l.io/go-eigentrust/pkg/basic"
@@ -15,7 +16,12 @@ var (
 		Long:  `Serve the EigenTrust API.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			e := echo.New()
-			e.Logger = lecho.From(logger)
+			eLogger := lecho.From(logger)
+			e.Logger = eLogger
+			e.Use(
+				middleware.RequestID(),
+				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
+			)
 			server := basic.StrictServerImpl{Logger: logger}
 			basic.RegisterHandlersWithBaseURL(e,
 				basic.NewStrictHandler(&server, nil), "/basic/v1")
