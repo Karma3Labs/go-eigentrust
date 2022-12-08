@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -141,10 +140,10 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	basicSetupEndpoint()
 	var err error
-	client := basic.ClientWithResponses{
-		ClientInterface: &basic.Client{
-			Server: endpoint, Client: http.DefaultClient,
-		},
+	client, err := basic.NewClientWithResponses(endpoint)
+	if err != nil {
+		logger.Err(err).Msg("cannot create an API client")
+		return
 	}
 	ctx := context.Background()
 	epsilonP := &epsilon
