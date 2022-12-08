@@ -25,8 +25,11 @@ var (
 		Args:  cobra.MatchAll(cobra.NoArgs),
 		Run:   runBasicCompute,
 	}
-	localTrustURI, preTrustURI string
-	alpha, epsilon             float64
+	localTrustURI  string
+	preTrustURI    string
+	alpha          float64
+	epsilon        float64
+	outputFilename string
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -172,8 +175,31 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		} else if inlineEigenTrust, err := resp.JSON200.AsInlineTrustVector(); err != nil {
 			logger.Error().Msg("cannot parse response")
 		} else {
+			var writer io.Writer = os.Stdout
+			closeOutput := func() {}
+			if outputFilename != "-" {
+				f, err := os.OpenFile(outputFilename,
+					os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o777)
+				if err != nil {
+					logger.Err(err).Msg("cannot open output file")
+					return
+				}
+				writer = f
+				closeOutput = func() { _ = f.Close() }
+			}
+			defer closeOutput()
+			csvWriter := csv.NewWriter(writer)
 			for _, entry := range inlineEigenTrust.Entries {
-				fmt.Printf("%#v,%#v\n", entry.I, entry.V)
+				if err = csvWriter.Write([]string{
+					strconv.FormatInt(int64(entry.I), 10),
+					strconv.FormatFloat(entry.V, 'f', -1, 64),
+				}); err != nil {
+					logger.Err(err).Msg("cannot write to output file")
+				}
+			}
+			csvWriter.Flush()
+			if csvWriter.Error() != nil {
+				logger.Err(err).Msg("cannot flush output file")
 			}
 		}
 	case 400:
@@ -204,4 +230,7 @@ If not given, server uses uniform trust vector by default.`)
 Higher value biases the computation toward pre-trust.`)
 	basicComputeCmd.Flags().Float64VarP(&epsilon, "epsilon", "e", 0.0,
 		`Epsilon (error max).  0 (default) uses server default.`)
+	basicComputeCmd.Flags().StringVarP(&outputFilename, "output", "o",
+		"-",
+		`Output file name; "-" (default) uses standard output"`)
 }
