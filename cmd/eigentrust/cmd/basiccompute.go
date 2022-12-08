@@ -167,14 +167,11 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	}
 	switch resp.StatusCode() {
 	case 200:
-		logger.Trace().Interface("json200", resp.JSON200).
-			Msg("response received")
 		if resp.JSON200 == nil {
 			logger.Error().Msg("cannot recover HTTP 200 response")
 		} else if inlineEigenTrust, err := resp.JSON200.AsInlineTrustVector(); err != nil {
 			logger.Error().Msg("cannot parse response")
 		} else {
-			logger.Info().Interface("eigenTrust", inlineEigenTrust).Msg("OK")
 			for _, entry := range inlineEigenTrust.Entries {
 				fmt.Printf("%#v,%#v\n", entry.I, entry.V)
 			}
