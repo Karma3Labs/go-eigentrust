@@ -21,6 +21,7 @@ as well as a client to interact with the server.`,
 func Execute() {
 	zerolog.TimeFieldFormat = "2006-01-02T15:04:05.000000000Z07:00"
 	logger = zerolog.New(zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
+		w.Out = os.Stderr
 		w.TimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
 	})).With().Timestamp().Logger()
 	err := rootCmd.Execute()
