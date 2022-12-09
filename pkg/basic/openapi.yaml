@@ -1,13 +1,17 @@
 openapi: 3.1.0
 info:
   title: EigenTrust Basic API
-  description: EigenTrust Basic API
-  version: 1.0.0
+  description: |
+    The EigenTrust Basic API implements the Basic EigenTrust algorithm.
+  version: 0.1.0
 servers:
   - url: 'https://api.k3l.io/basic/v1/'
 paths:
   /compute:
     post:
+      summary: Compute EigenTrust scores.
+      description: |
+        Compute EigenTrust scores using the given inputs.
       operationId: compute
       requestBody:
         required: true
@@ -17,7 +21,10 @@ paths:
               $ref: "#/components/schemas/ComputeRequest"
       responses:
         "200":
-          description: Successfully calculated the EigenTrust score.
+          description: |
+            Successfully computed the EigenTrust scores.
+            
+            The response body refers to the EigenTrust vector.
           content:
             "application/json":
               schema:
@@ -27,6 +34,8 @@ paths:
 components:
   schemas:
     ComputeRequest:
+      description: |
+        contains parameters for a compute request.
       type: object
       required:
         - localTrust
@@ -47,10 +56,18 @@ components:
           minimum: 0  # should really be exclusiveMinimum
           maximum: 1
     LocalTrustRef:
+      description: |
+        refers to a local trust.
       type: object
       oneOf:
         - $ref: "#/components/schemas/InlineLocalTrust"
     InlineLocalTrust:
+      description: |
+        Refers to a local trust matrix "inline".
+        
+        Instead of pointing (referencing) to an externally stored local trust,
+        it carries the contents of the local trust matrix
+        within the reference object itself.
       type: object
       required:
         - scheme
@@ -58,16 +75,31 @@ components:
         - entries
       properties:
         scheme:
+          description: |
+            A fixed string `"inline"` to denote an inline reference.
           type: string
           enum: ["inline"]
         size:
+          description: |
+            Denotes the number of peers in the local trust,
+            i.e. its square dimension.
           type: integer
           minimum: 1
         entries:
+          description: |
+            Contains the non-zero entries in the local trust matrix.
+            
+            Truster/trustee pairs missing here are assigned zero direct trust,
+            i.e. no trust relationship.
           type: array
           items:
             $ref: "#/components/schemas/InlineLocalTrustEntry"
     InlineLocalTrustEntry:
+      description: |
+        Represents an entry in the local trust matrix.
+        
+        Denotes that one peer (`i`) places a direct trust in another peer (`j`)
+        by a specific amount (`v`).
       type: object
       required:
         - i
@@ -75,20 +107,43 @@ components:
         - v
       properties:
         i:
+          description: |
+            Denotes the trusting peer.
+            
+            It is a zero-based index,
+            and must be less than the size (dimension)
+            of the enclosing local trust matrix.
           type: integer
           minimum: 0
         j:
+          description: |
+            Denotes the trusted peer.
+            
+            It is a zero-based index,
+            and must be less than the size (dimension)
+            of the enclosing local trust matrix.
           type: integer
           minimum: 0
         v:
+          description: |
+            Represents the (positive) amount of trust
+            placed by peer `i` in peer `j`.
           type: number
           format: double
           minimum: 0  # should really be exclusiveMinimum
     TrustVectorRef:
+      description: |
+        Refers to a trust vector.
       type: object
       oneOf:
         - $ref: "#/components/schemas/InlineTrustVector"
     InlineTrustVector:
+      description: |
+        Refers to a trust vector "inline".
+        
+        Instead of pointing (referencing) to an externally stored trust vector,
+        it carries the contents of the trust vector
+        within the reference object itself.
       type: object
       required:
         - scheme
@@ -96,31 +151,52 @@ components:
         - entries
       properties:
         scheme:
+          description: |
+            A fixed string `"inline"` to denote an inline reference.
           type: string
           enum: ["inline"]
         size:
+          description: |
+            Denotes the number of peers in the trust vector, i.e. its length.
           type: integer
           minimum: 1
         entries:
+          description: |
+            Contains the non-zero entries in the trust vector.
+            
+            Peers missing here are assigned zero amount of trust.
           type: array
           items:
             $ref: "#/components/schemas/InlineTrustVectorEntry"
     InlineTrustVectorEntry:
+      description: |
+        Represents an entry in the local trust matrix.
+        
+        Denotes that a trust is placed in a peer (`i`)
+        by a specific amount (`v`).
       type: object
       required:
         - i
         - v
       properties:
         i:
+          description: |
+            Denotes the peer.
+            
+            It is a zero-based index,
+            and must be less than the length of the enclosing trust vector.
           type: integer
           minimum: 0
         v:
+          description: |
+            Represents the (positive) amount of trust placed in peer `i`.
           type: number
           format: double
           minimum: 0  # should really be exclusiveMinimum
   responses:
     InvalidRequest:
-      description: Client sent an invalid request.
+      description: |
+        Client sent an invalid request.
       content:
         "application/json":
           schema:
@@ -129,4 +205,8 @@ components:
               - message
             properties:
               message:
+                description: |
+                  Describes the error in a human-readable message.
+                  
+                  It may be empty.
                 type: string

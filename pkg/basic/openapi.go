@@ -31,59 +31,116 @@ const (
 	InlineTrustVectorSchemeInline InlineTrustVectorScheme = "inline"
 )
 
-// ComputeRequest defines model for ComputeRequest.
+// ComputeRequest contains parameters for a compute request.
 type ComputeRequest struct {
-	Alpha      *float64        `json:"alpha,omitempty"`
-	Epsilon    *float64        `json:"epsilon,omitempty"`
-	LocalTrust LocalTrustRef   `json:"localTrust"`
-	PreTrust   *TrustVectorRef `json:"preTrust,omitempty"`
+	Alpha   *float64 `json:"alpha,omitempty"`
+	Epsilon *float64 `json:"epsilon,omitempty"`
+
+	// LocalTrust refers to a local trust.
+	LocalTrust LocalTrustRef `json:"localTrust"`
+
+	// PreTrust Refers to a trust vector.
+	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
 }
 
-// InlineLocalTrust defines model for InlineLocalTrust.
+// InlineLocalTrust Refers to a local trust matrix "inline".
+//
+// Instead of pointing (referencing) to an externally stored local trust,
+// it carries the contents of the local trust matrix
+// within the reference object itself.
 type InlineLocalTrust struct {
+	// Entries Contains the non-zero entries in the local trust matrix.
+	//
+	// Truster/trustee pairs missing here are assigned zero direct trust,
+	// i.e. no trust relationship.
 	Entries []InlineLocalTrustEntry `json:"entries"`
-	Scheme  InlineLocalTrustScheme  `json:"scheme"`
-	Size    int                     `json:"size"`
+
+	// Scheme A fixed string `"inline"` to denote an inline reference.
+	Scheme InlineLocalTrustScheme `json:"scheme"`
+
+	// Size Denotes the number of peers in the local trust,
+	// i.e. its square dimension.
+	Size int `json:"size"`
 }
 
-// InlineLocalTrustScheme defines model for InlineLocalTrust.Scheme.
+// InlineLocalTrustScheme A fixed string `"inline"` to denote an inline reference.
 type InlineLocalTrustScheme string
 
-// InlineLocalTrustEntry defines model for InlineLocalTrustEntry.
+// InlineLocalTrustEntry Represents an entry in the local trust matrix.
+//
+// Denotes that one peer (`i`) places a direct trust in another peer (`j`)
+// by a specific amount (`v`).
 type InlineLocalTrustEntry struct {
-	I int     `json:"i"`
-	J int     `json:"j"`
+	// I Denotes the trusting peer.
+	//
+	// It is a zero-based index,
+	// and must be less than the size (dimension)
+	// of the enclosing local trust matrix.
+	I int `json:"i"`
+
+	// J Denotes the trusted peer.
+	//
+	// It is a zero-based index,
+	// and must be less than the size (dimension)
+	// of the enclosing local trust matrix.
+	J int `json:"j"`
+
+	// V Represents the (positive) amount of trust
+	// placed by peer `i` in peer `j`.
 	V float64 `json:"v"`
 }
 
-// InlineTrustVector defines model for InlineTrustVector.
+// InlineTrustVector Refers to a trust vector "inline".
+//
+// Instead of pointing (referencing) to an externally stored trust vector,
+// it carries the contents of the trust vector
+// within the reference object itself.
 type InlineTrustVector struct {
+	// Entries Contains the non-zero entries in the trust vector.
+	//
+	// Peers missing here are assigned zero amount of trust.
 	Entries []InlineTrustVectorEntry `json:"entries"`
-	Scheme  InlineTrustVectorScheme  `json:"scheme"`
-	Size    int                      `json:"size"`
+
+	// Scheme A fixed string `"inline"` to denote an inline reference.
+	Scheme InlineTrustVectorScheme `json:"scheme"`
+
+	// Size Denotes the number of peers in the trust vector, i.e. its length.
+	Size int `json:"size"`
 }
 
-// InlineTrustVectorScheme defines model for InlineTrustVector.Scheme.
+// InlineTrustVectorScheme A fixed string `"inline"` to denote an inline reference.
 type InlineTrustVectorScheme string
 
-// InlineTrustVectorEntry defines model for InlineTrustVectorEntry.
+// InlineTrustVectorEntry Represents an entry in the local trust matrix.
+//
+// Denotes that a trust is placed in a peer (`i`)
+// by a specific amount (`v`).
 type InlineTrustVectorEntry struct {
-	I int     `json:"i"`
+	// I Denotes the peer.
+	//
+	// It is a zero-based index,
+	// and must be less than the length of the enclosing trust vector.
+	I int `json:"i"`
+
+	// V Represents the (positive) amount of trust placed in peer `i`.
 	V float64 `json:"v"`
 }
 
-// LocalTrustRef defines model for LocalTrustRef.
+// LocalTrustRef refers to a local trust.
 type LocalTrustRef struct {
 	union json.RawMessage
 }
 
-// TrustVectorRef defines model for TrustVectorRef.
+// TrustVectorRef Refers to a trust vector.
 type TrustVectorRef struct {
 	union json.RawMessage
 }
 
 // InvalidRequest defines model for InvalidRequest.
 type InvalidRequest struct {
+	// Message Describes the error in a human-readable message.
+	//
+	// It may be empty.
 	Message string `json:"message"`
 }
 
@@ -359,6 +416,9 @@ type ComputeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *TrustVectorRef
 	JSON400      *struct {
+		// Message Describes the error in a human-readable message.
+		//
+		// It may be empty.
 		Message string `json:"message"`
 	}
 }
@@ -419,6 +479,9 @@ func ParseComputeResponse(rsp *http.Response) (*ComputeResponse, error) {
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
+			// Message Describes the error in a human-readable message.
+			//
+			// It may be empty.
 			Message string `json:"message"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -433,7 +496,7 @@ func ParseComputeResponse(rsp *http.Response) (*ComputeResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
+	// Compute EigenTrust scores.
 	// (POST /compute)
 	Compute(ctx echo.Context) error
 }
@@ -485,6 +548,9 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 }
 
 type InvalidRequestJSONResponse struct {
+	// Message Describes the error in a human-readable message.
+	//
+	// It may be empty.
 	Message string `json:"message"`
 }
 
@@ -516,7 +582,7 @@ func (response Compute400JSONResponse) VisitComputeResponse(w http.ResponseWrite
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-
+	// Compute EigenTrust scores.
 	// (POST /compute)
 	Compute(ctx context.Context, request ComputeRequestObject) (ComputeResponseObject, error)
 }
@@ -566,17 +632,28 @@ func (sh *strictHandler) Compute(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"RRIAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
