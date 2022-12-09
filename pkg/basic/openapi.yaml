@@ -1,8 +1,7 @@
 openapi: 3.1.0
 info:
   title: EigenTrust Basic API
-  description: |
-    The EigenTrust Basic API implements the Basic EigenTrust algorithm.
+  summary: The EigenTrust Basic API implements the Basic EigenTrust algorithm.
   version: 0.1.0
 servers:
   - url: 'https://api.k3l.io/basic/v1/'
