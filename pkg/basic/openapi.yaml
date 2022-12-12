@@ -17,7 +17,25 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/ComputeRequest"
+              type: object
+              required:
+                - localTrust
+              properties:
+                localTrust:
+                  $ref: "#/components/schemas/LocalTrustRef"
+                preTrust:
+                  $ref: "#/components/schemas/TrustVectorRef"
+                alpha:
+                  type: number
+                  format: double
+                  minimum: 0
+                  maximum: 1
+                  default: 0.5
+                epsilon:
+                  type: number
+                  format: double
+                  minimum: 0  # should really be exclusiveMinimum
+                  maximum: 1
       responses:
         "200":
           description: |
@@ -32,28 +50,6 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
 components:
   schemas:
-    ComputeRequest:
-      description: |
-        contains parameters for a compute request.
-      type: object
-      required:
-        - localTrust
-      properties:
-        localTrust:
-          $ref: "#/components/schemas/LocalTrustRef"
-        preTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
-        alpha:
-          type: number
-          format: double
-          minimum: 0
-          maximum: 1
-          default: 0.5
-        epsilon:
-          type: number
-          format: double
-          minimum: 0  # should really be exclusiveMinimum
-          maximum: 1
     LocalTrustRef:
       description: |
         refers to a local trust.
