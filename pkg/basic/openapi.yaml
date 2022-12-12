@@ -5,14 +5,30 @@ info:
   version: 0.1.0
 servers:
   - url: 'https://api.k3l.io/basic/v1/'
+    description: |
+      The API server hosted by Karma3 Labs.
+  - url: 'http://localhost:8080/basic/v1'
+    description: |
+      The self-hosted local server, run by `eigentrust serve`.
 paths:
   /compute:
     post:
       summary: Compute EigenTrust scores.
       description: |
         Compute EigenTrust scores using the given inputs.
+
+        A compute request takes four inputs:
+
+          * Local trust matrix, in sparse form
+          * Pre-trust vector, in sparse form
+          * Pre-trust strength, a floating-point number between 0 and 1
+          * Error threshold, a floating-point number between 0 and 1
+
+        The local trust matrix is required; all others are optional.
       operationId: compute
       requestBody:
+        description: |
+          Parameters for a compute request.
         required: true
         content:
           "application/json":
@@ -36,11 +52,169 @@ paths:
                   format: double
                   minimum: 0  # should really be exclusiveMinimum
                   maximum: 1
+            examples:
+              Simple1:
+                summary: Simple 3-peer example
+                description: |
+                  This example passes a local trust of 3 peers (#0–#2), where:
+                  
+                  - #0 trusts #1,
+                  - #0 also trusts #2 – twice as much as #1,
+                  - #1 trusts #2, and
+                  - #2 trusts #0, i.e. reciprocates #0's trust.
+                  
+                  #0 and #1 are pre-trusted; #2 is not.
+                  #1 is pre-trusted four times more than #0.
+                  
+                  Pre-trust strength (`alpha`) is 0.1.
+                  
+                  Iteration threshold (`epsilon`) is absent;
+                  then the server uses a default value
+                  based upon the number of peers (3).
+                value:
+                  localTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        j: 1
+                        v: 0.25
+                      - i: 0
+                        j: 2
+                        v: 0.75
+                      - i: 1
+                        j: 2
+                        v: 1.0
+                      - i: 2
+                        j: 0
+                        v: 1.0
+                  preTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        v: 0.2
+                      - i: 1
+                        v: 0.8
+                  alpha: 0.1
+              Simple2:
+                summary: Simple 3-peer example with (unnecessarily) fine epsilon
+                description: |
+                  This example is the same as the previous example, except:
+                  
+                  - Values are scaled differently;
+                  - Iteration threshold value (`epsilon`) is given explicitly.
+                  
+                  That is, the trust levels by the same peer (#0 in this case)
+                  do not have to be pre-scaled or canonicalized by the client;
+                  only their relative magnitude matters.
+                  
+                  The explicit iteration threshold
+                  (`epsilon=1e-10`, or 0.0000000001)
+                  is much finer than the size-based default
+                  (`1e-6 / 3`, or 0.000003…),
+                  so it will take more iterations than the previous example,
+                  but will result in more accurate ranking,
+                  especially among lower-ranked peers near the tail.
+                  
+                  In this example of only 3 peers though,
+                  `epsilon=1e-10` is definitely an overkill:
+                  The relative ranking among peers #0–#2 will not change
+                  after only a few iterations.
+                  
+                  Developers are encouraged to experiment
+                  and tune `epsilon` to their needs,
+                  e.g. if only the top few clear winners are needed,
+                  a coarser (larger) `epsilon` will likely suffice.
+                value:
+                  localTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        j: 1
+                        v: 1.0
+                      - i: 0
+                        j: 2
+                        v: 3.0
+                      - i: 1
+                        j: 2
+                        v: 1.0
+                      - i: 2
+                        j: 0
+                        v: 1.0
+                  preTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        v: 1.0
+                      - i: 1
+                        v: 4.0
+                  alpha: 0.1
+                  epsilon: 1e-10
+              MissingLocalTrust:
+                summary: A 3-peer example with missing local trust by a peer
+                description: |
+                  In this example, local trust by #2 is missing/unknown.
+                  Per EigenTrust algorithm,
+                  it is assumed to be the same as the pre-trust.
+                  That is, #2 is assumed to trust #0 and #1,
+                  trusting #1 four times as much as #0.
+                value:
+                  localTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        j: 1
+                        v: 1.0
+                      - i: 0
+                        j: 2
+                        v: 3.0
+                      - i: 1
+                        j: 2
+                        v: 1.0
+                  preTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        v: 1.0
+                      - i: 1
+                        v: 4.0
+                  alpha: 0.1
+              MissingLocalTrustAndPreTrust:
+                summary: A 3-peer example with missing local trust and pre-trust
+                description: |
+                  In this example, not just #2's local trust but also the
+                  pre-trust is missing.
+                  Per EigenTrust algorithm,
+                  a uniform pre-trust is used if no pre-trust is specified,
+                  that is, peers #0–#2 are pre-trusted equally.
+                  Then in turn, the missing local trust by #2
+                  is assumed to be the same as the pre-trust,
+                  i.e. #2 is assumed to trust everyone equally.
+                value:
+                  localTrust:
+                    scheme: "inline"
+                    size: 3
+                    entries:
+                      - i: 0
+                        j: 1
+                        v: 1.0
+                      - i: 0
+                        j: 2
+                        v: 3.0
+                      - i: 1
+                        j: 2
+                        v: 1.0
+                  alpha: 0.1
       responses:
         "200":
           description: |
             Successfully computed the EigenTrust scores.
-            
+
             The response body refers to the EigenTrust vector.
           content:
             "application/json":
@@ -59,7 +233,7 @@ components:
     InlineLocalTrust:
       description: |
         Refers to a local trust matrix "inline".
-        
+
         Instead of pointing (referencing) to an externally stored local trust,
         it carries the contents of the local trust matrix
         within the reference object itself.
@@ -73,7 +247,7 @@ components:
           description: |
             A fixed string `"inline"` to denote an inline reference.
           type: string
-          enum: ["inline"]
+          enum: [ "inline" ]
         size:
           description: |
             Denotes the number of peers in the local trust,
@@ -83,16 +257,32 @@ components:
         entries:
           description: |
             Contains the non-zero entries in the local trust matrix.
-            
+
             Truster/trustee pairs missing here are assigned zero direct trust,
             i.e. no trust relationship.
           type: array
           items:
             $ref: "#/components/schemas/InlineLocalTrustEntry"
+      examples:
+        - scheme: inline
+          size: 3
+          entries:
+            - i: 0
+              j: 1
+              v: 1
+            - i: 0
+              j: 2
+              v: 1
+            - i: 1
+              j: 2
+              v: 100
+        - scheme: inline
+          size: 5
+          entries: [ ]
     InlineLocalTrustEntry:
       description: |
         Represents an entry in the local trust matrix.
-        
+
         Denotes that one peer (`i`) places a direct trust in another peer (`j`)
         by a specific amount (`v`).
       type: object
@@ -104,7 +294,7 @@ components:
         i:
           description: |
             Denotes the trusting peer.
-            
+
             It is a zero-based index,
             and must be less than the size (dimension)
             of the enclosing local trust matrix.
@@ -113,7 +303,7 @@ components:
         j:
           description: |
             Denotes the trusted peer.
-            
+
             It is a zero-based index,
             and must be less than the size (dimension)
             of the enclosing local trust matrix.
@@ -126,6 +316,13 @@ components:
           type: number
           format: double
           minimum: 0  # should really be exclusiveMinimum
+      examples:
+        - i: 0
+          j: 1
+          v: 0.5
+        - i: 1
+          j: 2
+          v: 1
     TrustVectorRef:
       description: |
         Refers to a trust vector.
@@ -135,7 +332,7 @@ components:
     InlineTrustVector:
       description: |
         Refers to a trust vector "inline".
-        
+
         Instead of pointing (referencing) to an externally stored trust vector,
         it carries the contents of the trust vector
         within the reference object itself.
@@ -149,7 +346,7 @@ components:
           description: |
             A fixed string `"inline"` to denote an inline reference.
           type: string
-          enum: ["inline"]
+          enum: [ "inline" ]
         size:
           description: |
             Denotes the number of peers in the trust vector, i.e. its length.
@@ -158,15 +355,26 @@ components:
         entries:
           description: |
             Contains the non-zero entries in the trust vector.
-            
+
             Peers missing here are assigned zero amount of trust.
           type: array
           items:
             $ref: "#/components/schemas/InlineTrustVectorEntry"
+      examples:
+        - scheme: inline
+          size: 3
+          entries:
+            - i: 0
+              v: 0.5
+            - i: 2
+              v: 1.0
+        - scheme: inline
+          size: 5
+          entries: [ ]
     InlineTrustVectorEntry:
       description: |
         Represents an entry in the local trust matrix.
-        
+
         Denotes that a trust is placed in a peer (`i`)
         by a specific amount (`v`).
       type: object
@@ -177,7 +385,7 @@ components:
         i:
           description: |
             Denotes the peer.
-            
+
             It is a zero-based index,
             and must be less than the length of the enclosing trust vector.
           type: integer
@@ -188,6 +396,11 @@ components:
           type: number
           format: double
           minimum: 0  # should really be exclusiveMinimum
+      examples:
+        - i: 0
+          v: 1.0
+        - i: 2
+          v: 0.5
   responses:
     InvalidRequest:
       description: |
@@ -202,6 +415,12 @@ components:
               message:
                 description: |
                   Describes the error in a human-readable message.
-                  
+
                   It may be empty.
                 type: string
+          examples:
+            Example1:
+              description: |
+                A parameter validation error.
+              value:
+                message: "cannot load local trust: unknown local trust ref type"
