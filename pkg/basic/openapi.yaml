@@ -57,17 +57,17 @@ paths:
                 summary: Simple 3-peer example
                 description: |
                   This example passes a local trust of 3 peers (#0–#2), where:
-                  
+
                   - #0 trusts #1,
                   - #0 also trusts #2 – twice as much as #1,
                   - #1 trusts #2, and
                   - #2 trusts #0, i.e. reciprocates #0's trust.
-                  
+
                   #0 and #1 are pre-trusted; #2 is not.
                   #1 is pre-trusted four times more than #0.
-                  
+
                   Pre-trust strength (`alpha`) is 0.1.
-                  
+
                   Iteration threshold (`epsilon`) is absent;
                   then the server uses a default value
                   based upon the number of peers (3).
@@ -101,14 +101,14 @@ paths:
                 summary: Simple 3-peer example with (unnecessarily) fine epsilon
                 description: |
                   This example is the same as the previous example, except:
-                  
+
                   - Values are scaled differently;
                   - Iteration threshold value (`epsilon`) is given explicitly.
-                  
+
                   That is, the trust levels by the same peer (#0 in this case)
                   do not have to be pre-scaled or canonicalized by the client;
                   only their relative magnitude matters.
-                  
+
                   The explicit iteration threshold
                   (`epsilon=1e-10`, or 0.0000000001)
                   is much finer than the size-based default
@@ -116,12 +116,12 @@ paths:
                   so it will take more iterations than the previous example,
                   but will result in more accurate ranking,
                   especially among lower-ranked peers near the tail.
-                  
+
                   In this example of only 3 peers though,
                   `epsilon=1e-10` is definitely an overkill:
                   The relative ranking among peers #0–#2 will not change
                   after only a few iterations.
-                  
+
                   Developers are encouraged to experiment
                   and tune `epsilon` to their needs,
                   e.g. if only the top few clear winners are needed,
@@ -216,10 +216,67 @@ paths:
             Successfully computed the EigenTrust scores.
 
             The response body refers to the EigenTrust vector.
+            This vector can be sorted in descending order of value (`v`)
+            so as to obtain a trust ranking.
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/TrustVectorRef"
+              examples:
+                Simple1:
+                  summary: Simple 3-peer example
+                  description: |
+                    This is the response to the “Simple 3-peer example” request.
+
+                    Peer #2 is the winner with highest trust value, closely
+                    followed by peer #0; #1 is the least trusted.
+                  value:
+                    {
+                      "entries": [
+                        {
+                          "i": 0,
+                          "v": 0.4033293137942772
+                        },
+                        {
+                          "i": 1,
+                          "v": 0.1707491350775377
+                        },
+                        {
+                          "i": 2,
+                          "v": 0.4259215511281855
+                        }
+                      ],
+                      "scheme": "inline",
+                      "size": 3
+                    }
+                Simple2:
+                  summary: Simple 3-peer example with (unnecessarily) fine epsilon
+                  description: |
+                    This is the response to the “Simple 3-peer example
+                    with (unnecessarily) fine epsilon” request above.
+
+                    Note that the trust values are more or less identical to
+                    the previous example, with less than 0.0001% difference,
+                    demonstrating the 1e-10 epsilon was an overkill.
+                  value:
+                    {
+                      "entries": [
+                        {
+                          "i": 0,
+                          "v": 0.40332936981024636
+                        },
+                        {
+                          "i": 1,
+                          "v": 0.17074910819849826
+                        },
+                        {
+                          "i": 2,
+                          "v": 0.425921521991256
+                        }
+                      ],
+                      "scheme": "inline",
+                      "size": 3
+                    }
         "400":
           $ref: "#/components/responses/InvalidRequest"
 components:
