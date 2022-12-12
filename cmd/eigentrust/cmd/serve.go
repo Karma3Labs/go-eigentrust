@@ -20,6 +20,7 @@ var (
 			e.Logger = eLogger
 			e.Use(
 				middleware.RequestID(),
+				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
 			server := basic.StrictServerImpl{Logger: logger}
