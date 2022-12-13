@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"io"
 	"os"
 
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
@@ -13,17 +15,36 @@ var (
 		Short: "EigenTrust CLI",
 		Long: `EigenTrust CLI provides an EigenTrust server
 as well as a client to interact with the server.`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			var logWriter io.Writer
+			switch logFile {
+			case "-":
+				logWriter = os.Stdout
+			case "":
+				logWriter = zerolog.NewConsoleWriter(
+					func(w *zerolog.ConsoleWriter) {
+						w.Out = os.Stderr
+						w.TimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
+					})
+			default:
+				w, err := os.OpenFile(logFile,
+					os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o0777)
+				if err != nil {
+					return errors.Wrap(err, "cannot open log file")
+				}
+				logWriter = w
+			}
+			logger = zerolog.New(logWriter).With().Timestamp().Logger()
+			return nil
+		},
 	}
 	cfgFile string
+	logFile string
 	logger  zerolog.Logger
 )
 
 func Execute() {
 	zerolog.TimeFieldFormat = "2006-01-02T15:04:05.000000000Z07:00"
-	logger = zerolog.New(zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
-		w.Out = os.Stderr
-		w.TimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
-	})).With().Timestamp().Logger()
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
@@ -33,4 +54,6 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
 		"config file (default is $HOME/.eigentrust.yaml)")
+	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "",
+		"log file (- means stdout; default: colorized stderr)")
 }
