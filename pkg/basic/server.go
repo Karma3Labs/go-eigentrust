@@ -39,6 +39,10 @@ func wrapfIn400(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
+	logger := server.Logger.With().
+		Str("name", "(*StrictServerImpl).Compute").Logger()
+	logTime := NewWallTimeLogger(logger).Log
+	defer logTime("last")
 	var (
 		localTrust LocalTrust
 		preTrust   TrustVector
@@ -49,6 +53,7 @@ func (server *StrictServerImpl) Compute(
 	if localTrust, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
 		return wrapIn400(err, "cannot load local trust"), nil
 	}
+	logTime("loadLocalTrust")
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		preTrust = NewEmptyTrustVector().Grow(localTrust.Dim())
@@ -75,15 +80,19 @@ func (server *StrictServerImpl) Compute(
 			return format400("epsilon=%f out of range (0..1]", epsilon), nil
 		}
 	}
+	logTime("preprocessing")
 	p := preTrust.Canonicalize()
+	logTime("CanonicalizePreTrust")
 	c, err := localTrust.Canonicalize(p)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot canonicalize local trust")
 	}
+	logTime("CanonicalizeLocalTrust")
 	t, err := Compute(ctx, c, p, alpha, epsilon, nil, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot compute EigenTrust")
 	}
+	logTime("Compute")
 	var itv InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
 	itv.Size = t.Len()
