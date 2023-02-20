@@ -1,11 +1,13 @@
 package basic
 
+import "C"
 import (
 	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
 type StrictServerImpl struct {
@@ -44,25 +46,29 @@ func (server *StrictServerImpl) Compute(
 	logTime := NewWallTimeLogger(logger).Log
 	defer logTime("last")
 	var (
-		localTrust LocalTrust
-		preTrust   TrustVector
-		alpha      float64
-		epsilon    float64
-		err        error
+		c       *sparse.Matrix
+		p       *sparse.Vector
+		alpha   float64
+		epsilon float64
+		err     error
 	)
-	if localTrust, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
+	if c, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
 		return wrapIn400(err, "cannot load local trust"), nil
 	}
 	logTime("loadLocalTrust")
+	logger.Trace().
+		Int("rows", c.Rows()).
+		Int("columns", c.Columns()).
+		Msg("local trust loaded")
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
-		preTrust = NewEmptyTrustVector().Grow(localTrust.Dim())
-	} else if preTrust, err = loadTrustVector(request.Body.PreTrust); err != nil {
+		p = sparse.NewVector(c.Dim(), nil)
+	} else if p, err = loadTrustVector(request.Body.PreTrust); err != nil {
 		return wrapIn400(err, "cannot load pre-trust"), nil
 	}
-	if localTrust.Dim() != preTrust.Len() {
+	if c.Dim() != p.Dim {
 		return format400("local trust size %d != pre-trust size %d",
-			localTrust.Dim(), preTrust.Len()), nil
+			c.Dim(), p.Dim), nil
 	}
 	if request.Body.Alpha == nil {
 		alpha = 0.5
@@ -73,7 +79,7 @@ func (server *StrictServerImpl) Compute(
 		}
 	}
 	if request.Body.Epsilon == nil {
-		epsilon = 1e-6 / float64(localTrust.Dim())
+		epsilon = 1e-6 / float64(c.Dim())
 	} else {
 		epsilon = *request.Body.Epsilon
 		if epsilon <= 0 || epsilon > 1 {
@@ -81,9 +87,9 @@ func (server *StrictServerImpl) Compute(
 		}
 	}
 	logTime("preprocessing")
-	p := preTrust.Canonicalize()
+	CanonicalizeTrustVector(p)
 	logTime("CanonicalizePreTrust")
-	c, err := localTrust.Canonicalize(p)
+	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot canonicalize local trust")
 	}
@@ -95,12 +101,10 @@ func (server *StrictServerImpl) Compute(
 	logTime("Compute")
 	var itv InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
-	itv.Size = t.Len()
-	for i, v := range t.Components() {
-		if v != 0 {
-			itv.Entries = append(itv.Entries,
-				InlineTrustVectorEntry{I: i, V: v})
-		}
+	itv.Size = t.Dim
+	for _, e := range t.Entries {
+		itv.Entries = append(itv.Entries,
+			InlineTrustVectorEntry{I: e.Index, V: e.Value})
 	}
 	var tv TrustVectorRef
 	if err = tv.FromInlineTrustVector(itv); err != nil {
@@ -111,7 +115,7 @@ func (server *StrictServerImpl) Compute(
 
 func (server *StrictServerImpl) loadLocalTrust(
 	ref *LocalTrustRef,
-) (LocalTrust, error) {
+) (*sparse.Matrix, error) {
 	if inline, err := ref.AsInlineLocalTrust(); err == nil {
 		return server.loadInlineLocalTrust(&inline)
 	}
@@ -120,11 +124,11 @@ func (server *StrictServerImpl) loadLocalTrust(
 
 func (server *StrictServerImpl) loadInlineLocalTrust(
 	inline *InlineLocalTrust,
-) (LocalTrust, error) {
+) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
 		return nil, errors.Errorf("invalid size=%#v", inline.Size)
 	}
-	lt := NewEmptyLocalTrust().Grow(inline.Size)
+	var entries []sparse.CooEntry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
 			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
@@ -138,20 +142,24 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 			return nil, errors.Errorf("entry %d: v=%f is out of range (0, inf)",
 				idx, entry.V)
 		}
-		lt.Set(entry.I, entry.J, entry.V)
+		entries = append(entries, sparse.CooEntry{
+			Row:    entry.I,
+			Column: entry.J,
+			Value:  entry.V,
+		})
 	}
-	return lt, nil
+	return sparse.NewCSRMatrix(inline.Size, inline.Size, entries), nil
 }
 
-func loadTrustVector(ref *TrustVectorRef) (TrustVector, error) {
+func loadTrustVector(ref *TrustVectorRef) (*sparse.Vector, error) {
 	if inline, err := ref.AsInlineTrustVector(); err == nil {
 		return loadInlineTrustVector(&inline)
 	}
 	return nil, errors.New("unknown trust vector type")
 }
 
-func loadInlineTrustVector(inline *InlineTrustVector) (TrustVector, error) {
-	lt := NewEmptyTrustVector().Grow(inline.Size)
+func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
+	var entries []sparse.Entry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
 			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
@@ -161,7 +169,7 @@ func loadInlineTrustVector(inline *InlineTrustVector) (TrustVector, error) {
 			return nil, errors.Errorf("entry %d: v=%f is out of range (0, inf)",
 				idx, entry.V)
 		}
-		lt.SetVec(entry.I, entry.V)
+		entries = append(entries, sparse.Entry{Index: entry.I, Value: entry.V})
 	}
-	return lt, nil
+	return sparse.NewVector(inline.Size, entries), nil
 }

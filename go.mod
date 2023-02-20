@@ -13,7 +13,6 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/ziflex/lecho/v3 v3.3.0
 	golang.org/x/tools v0.2.0
-	gonum.org/v1/gonum v0.12.0
 )
 
 require (
