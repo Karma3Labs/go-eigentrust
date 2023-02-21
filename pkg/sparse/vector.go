@@ -3,6 +3,7 @@ package sparse
 import (
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -203,11 +204,36 @@ OverallLoop:
 func (v *Vector) MulVec(m *Matrix, v1 *Vector) {
 	dim := m.Rows()
 	var entries []Entry
-	for row := 0; row < v.Dim; row++ {
-		if product := VecDot(m.RowVector(row), v1); product != 0 {
-			entries = append(entries, Entry{Index: row, Value: product})
+	jobs := make(chan int, v.Dim)
+	go func() {
+		defer close(jobs)
+		for row := 0; row < v.Dim; row++ {
+			jobs <- row
+		}
+	}()
+	numWorkers := 32
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+	entryCh := make(chan Entry, v.Dim)
+	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+		go func(workerIndex int) {
+			defer wg.Done()
+			for row := range jobs {
+				product := VecDot(m.RowVector(row), v1)
+				entryCh <- Entry{Index: row, Value: product}
+			}
+		}(workerIndex)
+	}
+	go func() {
+		wg.Wait()
+		close(entryCh)
+	}()
+	for e := range entryCh {
+		if e.Value != 0 {
+			entries = append(entries, e)
 		}
 	}
+	sort.Sort(entrySort(entries))
 	v.Dim = dim
 	v.Entries = entries
 }
