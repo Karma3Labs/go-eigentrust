@@ -32,9 +32,7 @@ func (m *CSMatrix) Transpose() *CSMatrix {
 		}
 	}
 	transposedEntries := make([][]Entry, m.MinorDim)
-	totalNNZ := 0
 	for col, nnz := range nnzs {
-		totalNNZ += nnz
 		transposedEntries[col] = make([]Entry, 0, nnz)
 	}
 	for row, rowEntries := range m.Entries {
