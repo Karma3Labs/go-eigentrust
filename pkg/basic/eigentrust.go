@@ -3,6 +3,7 @@ package basic
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"k3l.io/go-eigentrust/pkg/sparse"
@@ -54,6 +55,11 @@ func Compute(
 	e float64,
 	t0 *sparse.Vector, t *sparse.Vector,
 ) (*sparse.Vector, error) {
+	logger, hasLogger := LoggerInContext(ctx)
+	if hasLogger {
+		logger.Trace().Msg("started")
+	}
+	tm0 := time.Now()
 	if c.Rows() != c.Columns() {
 		return nil, errors.Errorf("local trust is not a square matrix (%dx%d)",
 			c.Rows(), c.Columns())
@@ -83,6 +89,13 @@ func Compute(
 	ct := c.Transpose()
 	ap := &sparse.Vector{}
 	ap.ScaleVec(a, p)
+	nnz := 0
+	for _, row := range c.Entries {
+		nnz += len(row)
+	}
+	tm1 := time.Now()
+	durPrep, tm0 := tm1.Sub(tm0), tm1
+	iter := 0
 	for d > e {
 		select {
 		case <-ctx.Done():
@@ -95,6 +108,26 @@ func Compute(
 		t1.AddVec(t1, ap)
 		t1Old.SubVec(t1, t1Old)
 		d = t1Old.Norm2()
+		if hasLogger {
+			logger.Trace().
+				Int("iteration", iter).
+				Float64("d", d).
+				Float64("e", e).
+				Msg("one iteration")
+		}
+	}
+	tm1 = time.Now()
+	durIter, tm0 := tm1.Sub(tm0), tm1
+	if hasLogger {
+		logger.Debug().
+			Int("dim", ct.Dim()).
+			Int("nnz", nnz).
+			Float64("alpha", a).
+			Float64("epsilon", e).
+			Int("iterations", iter).
+			Dur("durPrep", durPrep).
+			Dur("durIter", durIter).
+			Msg("finished")
 	}
 	if t == nil {
 		t = t1
