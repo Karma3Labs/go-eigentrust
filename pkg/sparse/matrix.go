@@ -25,7 +25,18 @@ func (m *CSMatrix) Dim() int {
 
 // Transpose transposes the sparse matrix.
 func (m *CSMatrix) Transpose() *CSMatrix {
+	nnzs := make([]int, m.MinorDim) // indexed by column
+	for _, rowEntries := range m.Entries {
+		for _, e := range rowEntries {
+			nnzs[e.Index]++
+		}
+	}
 	transposedEntries := make([][]Entry, m.MinorDim)
+	totalNNZ := 0
+	for col, nnz := range nnzs {
+		totalNNZ += nnz
+		transposedEntries[col] = make([]Entry, 0, nnz)
+	}
 	for row, rowEntries := range m.Entries {
 		for _, e := range rowEntries {
 			col := e.Index
