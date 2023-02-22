@@ -18,6 +18,11 @@ type Vector struct {
 	Entries []Entry
 }
 
+// NNZ returns the number of non-zero entries.
+func (v *Vector) NNZ() int {
+	return len(v.Entries)
+}
+
 type entrySort []Entry
 
 func (a entrySort) Len() int           { return len(a) }

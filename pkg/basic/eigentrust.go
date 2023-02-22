@@ -89,10 +89,6 @@ func Compute(
 	ct := c.Transpose()
 	ap := &sparse.Vector{}
 	ap.ScaleVec(a, p)
-	nnz := 0
-	for _, row := range c.Entries {
-		nnz += len(row)
-	}
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
 	iter := 0
@@ -121,7 +117,7 @@ func Compute(
 	if hasLogger {
 		logger.Debug().
 			Int("dim", ct.Dim()).
-			Int("nnz", nnz).
+			Int("nnz", ct.NNZ()).
 			Float64("alpha", a).
 			Float64("epsilon", e).
 			Int("iterations", iter).

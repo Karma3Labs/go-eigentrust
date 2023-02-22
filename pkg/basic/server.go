@@ -59,6 +59,7 @@ func (server *StrictServerImpl) Compute(
 	logger.Trace().
 		Int("rows", c.Rows()).
 		Int("columns", c.Columns()).
+		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
@@ -66,6 +67,10 @@ func (server *StrictServerImpl) Compute(
 	} else if p, err = loadTrustVector(request.Body.PreTrust); err != nil {
 		return wrapIn400(err, "cannot load pre-trust"), nil
 	}
+	logger.Trace().
+		Int("dim", p.Dim).
+		Int("nnz", p.NNZ()).
+		Msg("pre-trust loaded")
 	if c.Dim() != p.Dim {
 		return format400("local trust size %d != pre-trust size %d",
 			c.Dim(), p.Dim), nil

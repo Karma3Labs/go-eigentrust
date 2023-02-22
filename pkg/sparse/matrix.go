@@ -23,6 +23,14 @@ func (m *CSMatrix) Dim() int {
 	return m.MajorDim
 }
 
+// NNZ counts nonzero entries.
+func (m *CSMatrix) NNZ() (nnz int) {
+	for _, row := range m.Entries {
+		nnz += len(row)
+	}
+	return
+}
+
 // Transpose transposes the sparse matrix.
 func (m *CSMatrix) Transpose() *CSMatrix {
 	nnzs := make([]int, m.MinorDim) // indexed by column
