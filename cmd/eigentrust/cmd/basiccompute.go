@@ -140,6 +140,106 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	return nil
 }
 
+func trustVectorURIToRef(uri string, ref *basic.TrustVectorRef) error {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return err
+	}
+	switch parsed.Scheme {
+	case "file", "":
+		path := parsed.Path
+		if path == "" {
+			path = parsed.Opaque
+		}
+		return loadInlineTrustVector(path, ref)
+	default:
+		return errors.Errorf("invalid trust vector URI scheme %#v",
+			parsed.Scheme)
+	}
+}
+
+func loadInlineTrustVector(filename string, ref *basic.TrustVectorRef) error {
+	logger.Trace().Str("filename", filename).Msg("loading inline trust vector")
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".csv":
+		return loadInlineTrustVectorCsv(filename, ref)
+	default:
+		return errors.Errorf("invalid trust vector file type %#v", ext)
+	}
+}
+
+func loadInlineTrustVectorCsv(
+	filename string, ref *basic.TrustVectorRef,
+) error {
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	reader := csv.NewReader(f)
+	inputErrorf := func(field int, format string, v ...interface{}) error {
+		line, column := reader.FieldPos(0)
+		return errors.Errorf("%s:%d:%d: %s", filename, line, column,
+			fmt.Sprintf(format, v...))
+	}
+	inputWrapf := func(
+		err error, field int, format string, v ...interface{},
+	) error {
+		line, column := reader.FieldPos(0)
+		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
+			fmt.Sprintf(format, v...))
+	}
+	inline := basic.InlineTrustVector{
+		Entries: nil,
+		Scheme:  "inline",
+		Size:    0,
+	}
+	fields, err := reader.Read()
+	for ; err == nil; fields, err = reader.Read() {
+		if len(fields) < 1 {
+			return inputErrorf(0, "too few (%d) fields", len(fields))
+		}
+		if len(fields) > 2 {
+			return inputErrorf(0, "too many (%d) fields", len(fields))
+		}
+		var (
+			from  int64
+			value float64
+		)
+		from, err = strconv.ParseInt(fields[0], 0, 0)
+		switch {
+		case err != nil:
+			return inputWrapf(err, 0, "invalid from=%#v", fields[0])
+		case from < 0:
+			return inputErrorf(0, "negative from=%#v", from)
+		}
+		i := int(from)
+		value, err = strconv.ParseFloat(fields[1], 64)
+		switch {
+		case err != nil:
+			return inputWrapf(err, 1, "invalid trust value=%#v", fields[2])
+		case value < 0:
+			return inputErrorf(1, "negative value=%#v", value)
+		}
+		inline.Entries = append(inline.Entries,
+			basic.InlineTrustVectorEntry{I: i, V: value})
+		if inline.Size <= i {
+			inline.Size = i + 1
+		}
+	}
+	if inline.Size == 0 {
+		return errors.New("empty trust vector")
+	}
+	if err != io.EOF {
+		return errors.Wrapf(err, "cannot read trust vector CSV %#v", filename)
+	}
+	if err = ref.FromInlineTrustVector(inline); err != nil {
+		return errors.Wrap(err, "cannot wrap inline trust vector")
+	}
+	return nil
+}
+
 func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	basicSetupEndpoint()
 	var err error
@@ -162,6 +262,15 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if err != nil {
 		logger.Err(err).Msg("cannot parse/load local trust reference")
 		return
+	}
+	if preTrustURI != "" {
+		var preTrustRef basic.TrustVectorRef
+		err = trustVectorURIToRef(preTrustURI, &preTrustRef)
+		if err != nil {
+			logger.Err(err).Msg("cannot parse/load pre-trust reference")
+			return
+		}
+		requestBody.PreTrust = &preTrustRef
 	}
 	resp, err := client.ComputeWithResponse(ctx, requestBody)
 	if err != nil {
