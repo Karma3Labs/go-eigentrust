@@ -46,8 +46,6 @@ func (server *StrictServerImpl) Compute(
 	logger := server.Logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
 		Logger()
-	logTime := util.NewWallTimeLogger(logger).Log
-	defer logTime("last")
 	var (
 		c       *sparse.Matrix
 		p       *sparse.Vector
@@ -62,7 +60,6 @@ func (server *StrictServerImpl) Compute(
 	if err != nil {
 		return nil, err
 	}
-	logTime("loadLocalTrust")
 	logger.Trace().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
@@ -106,19 +103,15 @@ func (server *StrictServerImpl) Compute(
 			return format400("epsilon=%f out of range (0..1]", epsilon), nil
 		}
 	}
-	logTime("preprocessing")
 	CanonicalizeTrustVector(p)
-	logTime("CanonicalizePreTrust")
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot canonicalize local trust")
 	}
-	logTime("CanonicalizeLocalTrust")
 	t, err := Compute(ctx, c, p, alpha, epsilon, nil, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot compute EigenTrust")
 	}
-	logTime("Compute")
 	var itv InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
 	itv.Size = t.Dim
