@@ -90,10 +90,19 @@ func Compute(
 		default:
 		}
 		t1Old := t1.Clone()
-		t1.MulVec(ct, t1)
+		err = t1.MulVec(ct, t1)
+		if err != nil {
+			return nil, err
+		}
 		t1.ScaleVec(1-a, t1)
-		t1.AddVec(t1, ap)
-		t1Old.SubVec(t1, t1Old)
+		err = t1.AddVec(t1, ap)
+		if err != nil {
+			return nil, err
+		}
+		err = t1Old.SubVec(t1, t1Old)
+		if err != nil {
+			return nil, err
+		}
 		d = t1Old.Norm2()
 		if hasLogger {
 			logger.Trace().

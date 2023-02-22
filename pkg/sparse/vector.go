@@ -4,8 +4,6 @@ import (
 	"math"
 	"sort"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 // Vector is a sparse vector.
@@ -85,9 +83,9 @@ func max(a, b int) int {
 }
 
 // AddVec stores v1 + v2 into the receiver.
-func (v *Vector) AddVec(v1, v2 *Vector) {
+func (v *Vector) AddVec(v1, v2 *Vector) error {
 	if v1.Dim != v2.Dim {
-		panic(errors.Errorf("dimension mismatch (%d != %d)", v1.Dim, v2.Dim))
+		return ErrDimensionMismatch
 	}
 	e1, e2 := v1.Entries, v2.Entries
 	var entries []Entry
@@ -118,12 +116,13 @@ func (v *Vector) AddVec(v1, v2 *Vector) {
 	}
 	v.Dim = v1.Dim
 	v.Entries = entries
+	return nil
 }
 
 // SubVec stores v1 - v2 into the receiver.
-func (v *Vector) SubVec(v1, v2 *Vector) {
+func (v *Vector) SubVec(v1, v2 *Vector) error {
 	if v1.Dim != v2.Dim {
-		panic(errors.Errorf("dimension mismatch (%d != %d)", v1.Dim, v2.Dim))
+		return ErrDimensionMismatch
 	}
 	e1, e2 := v1.Entries, v2.Entries
 	var entries []Entry
@@ -154,6 +153,7 @@ func (v *Vector) SubVec(v1, v2 *Vector) {
 	}
 	v.Dim = v1.Dim
 	v.Entries = entries
+	return nil
 }
 
 // ScaleVec scales the vector and stores the result into the receiver.
@@ -216,13 +216,13 @@ OverallLoop:
 }
 
 // MulVec stores m multiplied by v1 into the receiver.
-func (v *Vector) MulVec(m *Matrix, v1 *Vector) {
+func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	dim, err := m.Dim()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if dim != v.Dim {
-		panic(ErrDimensionMismatch)
+		return ErrDimensionMismatch
 	}
 	var entries []Entry
 	jobs := make(chan int, v.Dim)
@@ -257,6 +257,7 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) {
 	sort.Sort(entrySort(entries))
 	v.Dim = dim
 	v.Entries = entries
+	return nil
 }
 
 // Norm2 returns the Frobenius norm (sqrt of sum of elements).
