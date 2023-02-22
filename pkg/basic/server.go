@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 type StrictServerImpl struct {
@@ -41,11 +42,11 @@ func wrapfIn400(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
-	ctx = SetLoggerInContext(ctx, server.Logger)
+	ctx = util.SetLoggerInContext(ctx, server.Logger)
 	logger := server.Logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
 		Logger()
-	logTime := NewWallTimeLogger(logger).Log
+	logTime := util.NewWallTimeLogger(logger).Log
 	defer logTime("last")
 	var (
 		c       *sparse.Matrix

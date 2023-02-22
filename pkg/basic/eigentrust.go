@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 // CsvReader reads from a CSV file.
@@ -48,7 +49,7 @@ func Compute(
 	e float64,
 	t0 *sparse.Vector, t *sparse.Vector,
 ) (*sparse.Vector, error) {
-	logger, hasLogger := LoggerInContext(ctx)
+	logger, hasLogger := util.LoggerInContext(ctx)
 	if hasLogger {
 		logger.Trace().Msg("started")
 	}

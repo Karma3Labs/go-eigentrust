@@ -1,4 +1,4 @@
-package basic
+package util
 
 import (
 	"context"
