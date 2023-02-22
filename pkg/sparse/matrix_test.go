@@ -72,8 +72,8 @@ func TestCSMatrix_Transpose(t *testing.T) {
 
 func TestNewCSRMatrix(t *testing.T) {
 	type args struct {
-		rows, columns int
-		entries       []CooEntry
+		rows, cols int
+		entries    []CooEntry
 	}
 	tests := []struct {
 		name string
@@ -134,7 +134,7 @@ func TestNewCSRMatrix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := NewCSRMatrix(
-				tt.args.rows, tt.args.columns, tt.args.entries,
+				tt.args.rows, tt.args.cols, tt.args.entries,
 			); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewCSRMatrix() = %v, want %v", got, tt.want)
 			}

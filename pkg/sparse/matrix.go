@@ -88,7 +88,7 @@ type CSRMatrix struct {
 //
 // The given entries are sorted in row-column order.
 func NewCSRMatrix(
-	rows, columns int,
+	rows, cols int,
 	entries []CooEntry,
 ) *CSRMatrix {
 	var entries2 [][]Entry
@@ -110,7 +110,7 @@ func NewCSRMatrix(
 	return &CSRMatrix{
 		CSMatrix{
 			MajorDim: rows,
-			MinorDim: columns,
+			MinorDim: cols,
 			Entries:  entries2,
 		},
 	}
