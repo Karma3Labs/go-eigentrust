@@ -90,7 +90,7 @@ func (v *Vector) AddVec(v1, v2 *Vector) error {
 	}
 	e1, e2 := v1.Entries, v2.Entries
 	var entries []Entry
-	for len(e1) > 0 && len(e2) > 0 {
+	for len(e1) > 0 || len(e2) > 0 {
 		if len(entries) == cap(entries) {
 			newEntries := make([]Entry, 0, cap(entries)+max(len(e1), len(e2)))
 			entries = append(newEntries, entries...)
@@ -127,7 +127,7 @@ func (v *Vector) SubVec(v1, v2 *Vector) error {
 	}
 	e1, e2 := v1.Entries, v2.Entries
 	var entries []Entry
-	for len(e1) > 0 && len(e2) > 0 {
+	for len(e1) > 0 || len(e2) > 0 {
 		if len(entries) == cap(entries) {
 			newEntries := make([]Entry, 0, cap(entries)+max(len(e1), len(e2)))
 			entries = append(newEntries, entries...)
