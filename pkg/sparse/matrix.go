@@ -63,7 +63,9 @@ func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 	}
 	transposedEntries := make([][]Entry, m.MinorDim)
 	for col, nnz := range nnzs {
-		transposedEntries[col] = make([]Entry, 0, nnz)
+		if nnz != 0 {
+			transposedEntries[col] = make([]Entry, 0, nnz)
+		}
 	}
 	for row, rowEntries := range m.Entries {
 		select {
