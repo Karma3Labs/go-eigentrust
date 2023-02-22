@@ -221,11 +221,11 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	if err != nil {
 		return err
 	}
-	if dim != v.Dim {
+	if dim != v1.Dim {
 		return ErrDimensionMismatch
 	}
 	var entries []Entry
-	jobs := make(chan int, v.Dim)
+	jobs := make(chan int, dim)
 	go func() {
 		defer close(jobs)
 		for row := 0; row < dim; row++ {
