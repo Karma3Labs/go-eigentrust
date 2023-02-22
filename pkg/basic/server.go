@@ -57,23 +57,27 @@ func (server *StrictServerImpl) Compute(
 	if c, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
 		return wrapIn400(err, "cannot load local trust"), nil
 	}
+	cDim, err := c.Dim()
+	if err != nil {
+		return nil, err
+	}
 	logTime("loadLocalTrust")
 	logger.Trace().
-		Int("rows", c.Rows()).
-		Int("columns", c.Columns()).
+		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
 	if request.Body.PreTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
-		p = sparse.NewVector(c.Dim(), nil)
+		p = sparse.NewVector(cDim, nil)
 	} else if p, err = loadTrustVector(request.Body.PreTrust); err != nil {
 		return wrapIn400(err, "cannot load pre-trust"), nil
 	} else {
 		// align dimensions
 		switch {
-		case p.Dim < c.Dim():
-			p.Dim = c.Dim()
-		case c.Dim() < p.Dim:
+		case p.Dim < cDim:
+			p.Dim = cDim
+		case cDim < p.Dim:
+			cDim = p.Dim
 			c.Grow(p.Dim, p.Dim)
 		}
 	}
@@ -81,9 +85,9 @@ func (server *StrictServerImpl) Compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
-	if c.Dim() != p.Dim {
+	if cDim != p.Dim {
 		return format400("local trust size %d != pre-trust size %d",
-			c.Dim(), p.Dim), nil
+			cDim, p.Dim), nil
 	}
 	if request.Body.Alpha == nil {
 		alpha = 0.5
@@ -94,7 +98,7 @@ func (server *StrictServerImpl) Compute(
 		}
 	}
 	if request.Body.Epsilon == nil {
-		epsilon = 1e-6 / float64(c.Dim())
+		epsilon = 1e-6 / float64(cDim)
 	} else {
 		epsilon = *request.Body.Epsilon
 		if epsilon <= 0 || epsilon > 1 {

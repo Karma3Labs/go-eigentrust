@@ -1,7 +1,6 @@
 package sparse
 
 import (
-	"fmt"
 	"sort"
 )
 
@@ -15,12 +14,11 @@ type CSMatrix struct {
 }
 
 // Dim asserts the receiver is a square matrix and returns the dimension.
-func (m *CSMatrix) Dim() int {
+func (m *CSMatrix) Dim() (int, error) {
 	if m.MajorDim != m.MinorDim {
-		panic(fmt.Sprintf("not a square matrix: %d != %d",
-			m.MajorDim, m.MinorDim))
+		return 0, ErrDimensionMismatch
 	}
-	return m.MajorDim
+	return m.MajorDim, nil
 }
 
 // GrowMajor grows the receiver in-place

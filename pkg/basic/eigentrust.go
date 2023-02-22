@@ -52,11 +52,10 @@ func Compute(
 		logger.Trace().Msg("started")
 	}
 	tm0 := time.Now()
-	if c.Rows() != c.Columns() {
-		return nil, errors.Errorf("local trust is not a square matrix (%dx%d)",
-			c.Rows(), c.Columns())
+	n, err := c.Dim()
+	if err != nil {
+		return nil, err
 	}
-	n := c.Rows()
 	if n == 0 {
 		return nil, errors.New("empty local trust")
 	}
@@ -108,7 +107,7 @@ func Compute(
 	durIter, tm0 := tm1.Sub(tm0), tm1
 	if hasLogger {
 		logger.Debug().
-			Int("dim", ct.Dim()).
+			Int("dim", n).
 			Int("nnz", ct.NNZ()).
 			Float64("alpha", a).
 			Float64("epsilon", e).

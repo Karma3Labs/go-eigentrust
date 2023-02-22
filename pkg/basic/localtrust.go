@@ -16,7 +16,10 @@ import (
 func CanonicalizeLocalTrust(
 	localTrust *sparse.Matrix, preTrust *sparse.Vector,
 ) error {
-	n := localTrust.Dim()
+	n, err := localTrust.Dim()
+	if err != nil {
+		return err
+	}
 	if n != preTrust.Dim {
 		return sparse.ErrDimensionMismatch
 	}

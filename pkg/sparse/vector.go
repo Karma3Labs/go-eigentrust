@@ -207,19 +207,25 @@ OverallLoop:
 
 // MulVec stores m multiplied by v1 into the receiver.
 func (v *Vector) MulVec(m *Matrix, v1 *Vector) {
-	dim := m.Rows()
+	dim, err := m.Dim()
+	if err != nil {
+		panic(err)
+	}
+	if dim != v.Dim {
+		panic(ErrDimensionMismatch)
+	}
 	var entries []Entry
 	jobs := make(chan int, v.Dim)
 	go func() {
 		defer close(jobs)
-		for row := 0; row < v.Dim; row++ {
+		for row := 0; row < dim; row++ {
 			jobs <- row
 		}
 	}()
 	numWorkers := 32
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
-	entryCh := make(chan Entry, v.Dim)
+	entryCh := make(chan Entry, dim)
 	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
 		go func(workerIndex int) {
 			defer wg.Done()

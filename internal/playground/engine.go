@@ -115,13 +115,17 @@ func calculate(gc *gin.Context) error {
 			return errors.Wrap(err, "cannot read personal trust file")
 		}
 	}
+	ltDim, err := localTrust.Dim()
+	if err != nil {
+		return err
+	}
 	if hasPeerNames {
 		// peer name files are the authoritative source of dimension
 		n := len(peerNames)
 		switch {
-		case localTrust.Dim() < n:
-			basic.GrowLocalTrust(localTrust, n-localTrust.Dim())
-		case localTrust.Dim() > n:
+		case ltDim < n:
+			basic.GrowLocalTrust(localTrust, n-ltDim)
+		case ltDim > n:
 			panic("localTrust is larger than peerNames")
 		}
 		switch {
@@ -133,10 +137,10 @@ func calculate(gc *gin.Context) error {
 	} else {
 		// grow the smaller one
 		switch {
-		case localTrust.Dim() < preTrust.Dim:
-			basic.GrowLocalTrust(localTrust, preTrust.Dim-localTrust.Dim())
-		case preTrust.Dim < localTrust.Dim():
-			basic.GrowTrustVector(preTrust, localTrust.Dim()-preTrust.Dim)
+		case ltDim < preTrust.Dim:
+			basic.GrowLocalTrust(localTrust, preTrust.Dim-ltDim)
+		case preTrust.Dim < ltDim:
+			basic.GrowTrustVector(preTrust, ltDim-preTrust.Dim)
 		}
 	}
 	dim := preTrust.Dim
