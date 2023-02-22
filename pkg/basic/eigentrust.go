@@ -9,14 +9,6 @@ import (
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
-// ErrZeroSum signals that an input vector's components sum to zero.
-var ErrZeroSum = errors.New("zero sum")
-
-// ErrDimensionMismatch signals a dimension mismatch
-// between related data structures,
-// ex: a local trust matrix and a pre-trust vector.
-var ErrDimensionMismatch = errors.New("dimension mismatch")
-
 // CsvReader reads from a CSV file.
 type CsvReader interface {
 	Read() (fields []string, err error)
@@ -32,7 +24,7 @@ func Canonicalize(entries []sparse.Entry) error {
 	}
 	s := summer.Sum()
 	if s == 0 {
-		return ErrZeroSum
+		return sparse.ErrZeroSum
 	}
 	for i := range entries {
 		entries[i].Value /= s
@@ -71,7 +63,7 @@ func Compute(
 	if p.Dim != n ||
 		(t0 != nil && t0.Dim != n) ||
 		(t != nil && t.Dim != n) {
-		return nil, ErrDimensionMismatch
+		return nil, sparse.ErrDimensionMismatch
 	}
 	if a < 0 || a > 1 {
 		return nil, errors.Errorf("hunch %#v out of range [0..1]", a)

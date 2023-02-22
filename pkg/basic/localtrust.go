@@ -18,13 +18,13 @@ func CanonicalizeLocalTrust(
 ) error {
 	n := localTrust.Dim()
 	if n != preTrust.Dim {
-		return ErrDimensionMismatch
+		return sparse.ErrDimensionMismatch
 	}
 	for i := 0; i < n; i++ {
 		inRow := localTrust.RowVector(i)
 		switch err := Canonicalize(inRow.Entries); err {
 		case nil:
-		case ErrZeroSum:
+		case sparse.ErrZeroSum:
 			localTrust.SetRowVector(i, preTrust)
 		default:
 			return err
