@@ -116,9 +116,8 @@ func NewCSRMatrix(
 	}
 }
 
-// Rows and Columns return the number of rows/columns.
-func (m *CSRMatrix) Rows() int    { return m.MajorDim }
-func (m *CSRMatrix) Columns() int { return m.MinorDim }
+// Dims returns the numbers of rows/columns.
+func (m *CSRMatrix) Dims() (rows, cols int) { return m.MajorDim, m.MinorDim }
 
 // SetDim grows/shrinks the receiver in-place,
 // so it contains the specified number of rows/columns.
@@ -166,9 +165,8 @@ type CSCMatrix struct {
 	CSMatrix
 }
 
-// Rows and Columns return the number of rows/columns
-func (m *CSCMatrix) Rows() int    { return m.MinorDim }
-func (m *CSCMatrix) Columns() int { return m.MajorDim }
+// Dims returns the numbers of rows/columns.
+func (m *CSCMatrix) Dims() (rows, cols int) { return m.MinorDim, m.MajorDim }
 
 // SetDim grows/shrinks the receiver in-place,
 // so it contains the specified number of rows/columns.
