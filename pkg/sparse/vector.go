@@ -224,7 +224,6 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	if dim != v1.Dim {
 		return ErrDimensionMismatch
 	}
-	var entries []Entry
 	jobs := make(chan int, dim)
 	go func() {
 		defer close(jobs)
@@ -235,28 +234,29 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	numWorkers := 32
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
-	entryCh := make(chan Entry, dim)
+	entries := make(chan Entry, dim)
 	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
 		go func(workerIndex int) {
 			defer wg.Done()
 			for row := range jobs {
 				product := VecDot(m.RowVector(row), v1)
-				entryCh <- Entry{Index: row, Value: product}
+				entries <- Entry{Index: row, Value: product}
 			}
 		}(workerIndex)
 	}
 	go func() {
 		wg.Wait()
-		close(entryCh)
+		close(entries)
 	}()
-	for e := range entryCh {
+	var sortedEntries []Entry
+	for e := range entries {
 		if e.Value != 0 {
-			entries = append(entries, e)
+			sortedEntries = append(sortedEntries, e)
 		}
 	}
-	sort.Sort(entrySort(entries))
+	sort.Sort(entrySort(sortedEntries))
 	v.Dim = dim
-	v.Entries = entries
+	v.Entries = sortedEntries
 	return nil
 }
 
