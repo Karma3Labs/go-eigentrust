@@ -68,6 +68,14 @@ func (server *StrictServerImpl) Compute(
 		p = sparse.NewVector(c.Dim(), nil)
 	} else if p, err = loadTrustVector(request.Body.PreTrust); err != nil {
 		return wrapIn400(err, "cannot load pre-trust"), nil
+	} else {
+		// align dimensions
+		switch {
+		case p.Dim < c.Dim():
+			p.Dim = c.Dim()
+		case c.Dim() < p.Dim:
+			c.Grow(p.Dim, p.Dim)
+		}
 	}
 	logger.Trace().
 		Int("dim", p.Dim).

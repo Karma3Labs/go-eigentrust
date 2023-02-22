@@ -23,6 +23,17 @@ func (m *CSMatrix) Dim() int {
 	return m.MajorDim
 }
 
+// GrowMajor grows the receiver in-place
+// so it matches the given major dimension.
+func (m *CSMatrix) GrowMajor(dim int) {
+	if m.MajorDim < dim {
+		newEntries := make([][]Entry, dim)
+		copy(newEntries, m.Entries)
+		m.Entries = newEntries
+		m.MajorDim = dim
+	}
+}
+
 // NNZ counts nonzero entries.
 func (m *CSMatrix) NNZ() (nnz int) {
 	for _, row := range m.Entries {
@@ -98,6 +109,12 @@ func NewCSRMatrix(
 // Rows and Columns return the number of rows/columns.
 func (m *CSRMatrix) Rows() int    { return m.MajorDim }
 func (m *CSRMatrix) Columns() int { return m.MinorDim }
+
+// Grow grows the receiver in-place,
+// so it contains the specified number of rows/columns.
+func (m *CSRMatrix) Grow(rows, columns int) {
+	m.GrowMajor(rows)
+}
 
 // RowVector returns the given row as a sparse vector.
 // The returned vector shares the same slice of entry objects.
