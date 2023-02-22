@@ -1,6 +1,7 @@
 package sparse
 
 import (
+	"context"
 	"sort"
 )
 
@@ -53,7 +54,7 @@ func (m *CSMatrix) NNZ() (nnz int) {
 }
 
 // Transpose transposes the sparse matrix.
-func (m *CSMatrix) Transpose() *CSMatrix {
+func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 	nnzs := make([]int, m.MinorDim) // indexed by column
 	for _, rowEntries := range m.Entries {
 		for _, e := range rowEntries {
@@ -65,6 +66,11 @@ func (m *CSMatrix) Transpose() *CSMatrix {
 		transposedEntries[col] = make([]Entry, 0, nnz)
 	}
 	for row, rowEntries := range m.Entries {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		for _, e := range rowEntries {
 			col := e.Index
 			transposedEntries[col] = append(transposedEntries[col],
@@ -75,7 +81,7 @@ func (m *CSMatrix) Transpose() *CSMatrix {
 		MajorDim: m.MinorDim,
 		MinorDim: m.MajorDim,
 		Entries:  transposedEntries,
-	}
+	}, nil
 }
 
 // CSRMatrix is a compressed sparse row matrix.
@@ -142,9 +148,13 @@ func (m *CSRMatrix) SetRowVector(index int, vector *Vector) {
 }
 
 // Transpose transposes the matrix.
-func (m *CSRMatrix) Transpose() *CSRMatrix {
-	return &CSRMatrix{
-		*m.CSMatrix.Transpose(),
+func (m *CSRMatrix) Transpose(ctx context.Context) (*CSRMatrix, error) {
+	mt, err := m.CSMatrix.Transpose(ctx)
+	switch err {
+	case nil:
+		return &CSRMatrix{*mt}, nil
+	default:
+		return nil, err
 	}
 }
 
@@ -185,9 +195,13 @@ func (m *CSCMatrix) ColumnVector(index int) *Vector {
 }
 
 // Transpose transposes the matrix.
-func (m *CSCMatrix) Transpose() *CSCMatrix {
-	return &CSCMatrix{
-		*m.CSMatrix.Transpose(),
+func (m *CSCMatrix) Transpose(ctx context.Context) (*CSCMatrix, error) {
+	mt, err := m.CSMatrix.Transpose(ctx)
+	switch err {
+	case nil:
+		return &CSCMatrix{*mt}, nil
+	default:
+		return nil, err
 	}
 }
 

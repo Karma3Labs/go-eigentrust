@@ -1,6 +1,7 @@
 package sparse
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
@@ -58,11 +59,11 @@ func TestCSMatrix_Transpose(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mt := tt.m.Transpose()
+			mt, _ := tt.m.Transpose(context.Background())
 			if !reflect.DeepEqual(mt, tt.mt) {
 				t.Errorf("m.Transpose() = %v, want %v", mt, tt.mt)
 			}
-			mtt := mt.Transpose()
+			mtt, _ := mt.Transpose(context.Background())
 			if !reflect.DeepEqual(mtt, tt.m) {
 				t.Errorf("m.Transpose().Transpose() = %v, want %v", mtt, tt.m)
 			}

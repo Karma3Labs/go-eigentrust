@@ -1,6 +1,7 @@
 package sparse
 
 import (
+	"context"
 	"math"
 	"sort"
 	"sync"
@@ -216,7 +217,9 @@ OverallLoop:
 }
 
 // MulVec stores m multiplied by v1 into the receiver.
-func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
+func (v *Vector) MulVec(
+	ctx context.Context, m *Matrix, v1 *Vector,
+) error {
 	dim, err := m.Dim()
 	if err != nil {
 		return err
@@ -224,11 +227,18 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	if dim != v1.Dim {
 		return ErrDimensionMismatch
 	}
+	// Distribute row jobs onto workers, who publish to entries.
+	// Workers feed entries chan; they exit upon jobs are exhausted.
+	// entries chan is closed when all workers exit (no one left to feed it).
 	jobs := make(chan int, dim)
 	go func() {
 		defer close(jobs)
 		for row := 0; row < dim; row++ {
-			jobs <- row
+			select {
+			case <-ctx.Done():
+				return // closes jobs, which in turn terminates workers
+			case jobs <- row:
+			}
 		}
 	}()
 	numWorkers := 32
@@ -238,9 +248,22 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
 		go func(workerIndex int) {
 			defer wg.Done()
-			for row := range jobs {
+			row, ok := 0, false
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case row, ok = <-jobs:
+					if !ok {
+						return
+					}
+				}
 				product := VecDot(m.RowVector(row), v1)
-				entries <- Entry{Index: row, Value: product}
+				select {
+				case <-ctx.Done():
+					return
+				case entries <- Entry{Index: row, Value: product}:
+				}
 			}
 		}(workerIndex)
 	}
@@ -249,9 +272,18 @@ func (v *Vector) MulVec(m *Matrix, v1 *Vector) error {
 		close(entries)
 	}()
 	var sortedEntries []Entry
-	for e := range entries {
-		if e.Value != 0 {
-			sortedEntries = append(sortedEntries, e)
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case e, ok := <-entries:
+			if !ok {
+				break Loop
+			}
+			if e.Value != 0 {
+				sortedEntries = append(sortedEntries, e)
+			}
 		}
 	}
 	sort.Sort(entrySort(sortedEntries))

@@ -77,7 +77,10 @@ func Compute(
 	t1 := t0.Clone()
 
 	d := 2 * e // initial sentinel
-	ct := c.Transpose()
+	ct, err := c.Transpose(ctx)
+	if err != nil {
+		return nil, err
+	}
 	ap := &sparse.Vector{}
 	ap.ScaleVec(a, p)
 	tm1 := time.Now()
@@ -90,7 +93,7 @@ func Compute(
 		default:
 		}
 		t1Old := t1.Clone()
-		err = t1.MulVec(ct, t1)
+		err = t1.MulVec(ctx, ct, t1)
 		if err != nil {
 			return nil, err
 		}
