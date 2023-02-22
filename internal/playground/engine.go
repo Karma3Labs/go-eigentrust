@@ -126,13 +126,13 @@ func calculate(gc *gin.Context) error {
 		case ltDim < n:
 			basic.GrowLocalTrust(localTrust, n-ltDim)
 		case ltDim > n:
-			panic("localTrust is larger than peerNames")
+			return errors.New("localTrust is larger than peerNames")
 		}
 		switch {
 		case preTrust.Dim < n:
 			basic.GrowTrustVector(preTrust, n-preTrust.Dim)
 		case preTrust.Dim > n:
-			panic("preTrust is larger than peerNames")
+			return errors.New("preTrust is larger than peerNames")
 		}
 	} else {
 		// grow the smaller one
