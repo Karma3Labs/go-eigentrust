@@ -36,19 +36,6 @@ func CanonicalizeLocalTrust(
 	return nil
 }
 
-// GrowLocalTrust grows localTrust in-place by the specified amount.
-// Newly added rows/columns are zero.
-func GrowLocalTrust(localTrust *sparse.Matrix, by int) {
-	if by < 0 {
-		panic("negative by")
-	}
-	localTrust.MajorDim += by
-	localTrust.MinorDim += by
-	for i := 0; i < by; i++ {
-		localTrust.Entries = append(localTrust.Entries, nil)
-	}
-}
-
 // ReadLocalTrustFromCsv reads a local trust matrix from the given CSV file.
 func ReadLocalTrustFromCsv(
 	reader CsvReader, peerIndices map[string]int,

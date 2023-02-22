@@ -75,10 +75,10 @@ func (server *StrictServerImpl) Compute(
 		// align dimensions
 		switch {
 		case p.Dim < cDim:
-			p.Dim = cDim
+			p.SetDim(cDim)
 		case cDim < p.Dim:
 			cDim = p.Dim
-			c.Grow(p.Dim, p.Dim)
+			c.SetDim(p.Dim, p.Dim)
 		}
 	}
 	logger.Trace().

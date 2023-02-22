@@ -57,6 +57,16 @@ func (v *Vector) Clone() *Vector {
 	}
 }
 
+// SetDim grows/shrinks the receiver in-place to match the given dimension.
+func (v *Vector) SetDim(dim int) {
+	if dim < v.Dim {
+		end := sort.Search(len(v.Entries),
+			func(i int) bool { return v.Entries[i].Index >= dim })
+		v.Entries = v.Entries[:end]
+	}
+	v.Dim = dim
+}
+
 // Sum computes the sum of all vector elements.
 func (v *Vector) Sum() float64 {
 	var summer KBNSummer

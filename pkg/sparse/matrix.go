@@ -21,15 +21,27 @@ func (m *CSMatrix) Dim() (int, error) {
 	return m.MajorDim, nil
 }
 
-// GrowMajor grows the receiver in-place
+// SetMajorDim grows/shrinks the receiver in-place,
 // so it matches the given major dimension.
-func (m *CSMatrix) GrowMajor(dim int) {
-	if m.MajorDim < dim {
-		newEntries := make([][]Entry, dim)
-		copy(newEntries, m.Entries)
-		m.Entries = newEntries
-		m.MajorDim = dim
+func (m *CSMatrix) SetMajorDim(dim int) {
+	if cap(m.Entries) < dim {
+		m.Entries = append(make([][]Entry, 0, dim), m.Entries...)
 	}
+	m.Entries = m.Entries[:dim]
+	m.MajorDim = dim
+}
+
+// SetMinorDim grows/shrinks the receiver in-place,
+// so it matches the given minor dimension.
+func (m *CSMatrix) SetMinorDim(dim int) {
+	if dim < m.MinorDim {
+		for maj, entries := range m.Entries {
+			end := sort.Search(len(entries),
+				func(i int) bool { return entries[i].Index >= dim })
+			m.Entries[maj] = entries[:end]
+		}
+	}
+	m.MinorDim = dim
 }
 
 // NNZ counts nonzero entries.
@@ -108,10 +120,11 @@ func NewCSRMatrix(
 func (m *CSRMatrix) Rows() int    { return m.MajorDim }
 func (m *CSRMatrix) Columns() int { return m.MinorDim }
 
-// Grow grows the receiver in-place,
+// SetDim grows/shrinks the receiver in-place,
 // so it contains the specified number of rows/columns.
-func (m *CSRMatrix) Grow(rows, columns int) {
-	m.GrowMajor(rows)
+func (m *CSRMatrix) SetDim(rows, cols int) {
+	m.SetMajorDim(rows)
+	m.SetMinorDim(cols)
 }
 
 // RowVector returns the given row as a sparse vector.
@@ -156,6 +169,13 @@ type CSCMatrix struct {
 // Rows and Columns return the number of rows/columns
 func (m *CSCMatrix) Rows() int    { return m.MinorDim }
 func (m *CSCMatrix) Columns() int { return m.MajorDim }
+
+// SetDim grows/shrinks the receiver in-place,
+// so it contains the specified number of rows/columns.
+func (m *CSCMatrix) SetDim(rows, cols int) {
+	m.SetMajorDim(cols)
+	m.SetMinorDim(rows)
+}
 
 // ColumnVector returns the given row as a sparse vector.
 // The returned vector shares the same entry objects.

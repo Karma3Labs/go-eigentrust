@@ -22,15 +22,6 @@ func CanonicalizeTrustVector(v *sparse.Vector) {
 	}
 }
 
-// GrowTrustVector grows localTrust in-place by the specified amount.
-// Newly added rows/columns are zero.
-func GrowTrustVector(trustVector *sparse.Vector, by int) {
-	if by < 0 {
-		panic("negative by")
-	}
-	trustVector.Dim += by
-}
-
 // ReadTrustVectorFromCsv reads a trust vector from the given CSV file.
 func ReadTrustVectorFromCsv(
 	reader CsvReader, peerIndices map[string]int,
