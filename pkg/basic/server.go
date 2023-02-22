@@ -41,8 +41,10 @@ func wrapfIn400(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
+	ctx = SetLoggerInContext(ctx, server.Logger)
 	logger := server.Logger.With().
-		Str("name", "(*StrictServerImpl).Compute").Logger()
+		Str("func", "(*StrictServerImpl).Compute").
+		Logger()
 	logTime := NewWallTimeLogger(logger).Log
 	defer logTime("last")
 	var (
