@@ -3,6 +3,7 @@ package basic
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/pkg/errors"
@@ -76,6 +77,7 @@ func Compute(
 	}
 	t1 := t0.Clone()
 
+	d0 := 1.0
 	d := 2 * e // initial sentinel
 	ct, err := c.Transpose(ctx)
 	if err != nil {
@@ -86,7 +88,7 @@ func Compute(
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
 	iter := 0
-	for d > e {
+	for ; d > e; iter++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -110,10 +112,11 @@ func Compute(
 		if hasLogger {
 			logger.Trace().
 				Int("iteration", iter).
-				Float64("d", d).
-				Float64("e", e).
+				Float64("log10dPace", math.Log10(d/e)).
+				Float64("log10dRemaining", math.Log10(d/d0)).
 				Msg("one iteration")
 		}
+		d0 = d
 	}
 	tm1 = time.Now()
 	durIter, tm0 := tm1.Sub(tm0), tm1
