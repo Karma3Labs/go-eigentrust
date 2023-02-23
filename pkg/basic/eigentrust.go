@@ -113,8 +113,8 @@ func Compute(
 		if hasLogger {
 			logger.Trace().
 				Int("iteration", iter).
-				Float64("log10dPace", math.Log10(d/e)).
-				Float64("log10dRemaining", math.Log10(d/d0)).
+				Float64("log10dPace", math.Log10(d/d0)).
+				Float64("log10dRemaining", math.Log10(d/e)).
 				Msg("one iteration")
 		}
 		d0 = d
