@@ -27,189 +27,7 @@ paths:
         The local trust matrix is required; all others are optional.
       operationId: compute
       requestBody:
-        description: |
-          Parameters for a compute request.
-        required: true
-        content:
-          "application/json":
-            schema:
-              type: object
-              required:
-                - localTrust
-              properties:
-                localTrust:
-                  $ref: "#/components/schemas/LocalTrustRef"
-                preTrust:
-                  $ref: "#/components/schemas/TrustVectorRef"
-                alpha:
-                  type: number
-                  format: double
-                  minimum: 0
-                  maximum: 1
-                  default: 0.5
-                epsilon:
-                  type: number
-                  format: double
-                  minimum: 0  # should really be exclusiveMinimum
-                  maximum: 1
-            examples:
-              Simple1:
-                summary: Simple 3-peer example
-                description: |
-                  This example passes a local trust of 3 peers (#0–#2), where:
-
-                  - #0 trusts #1,
-                  - #0 also trusts #2 – twice as much as #1,
-                  - #1 trusts #2, and
-                  - #2 trusts #0, i.e. reciprocates #0's trust.
-
-                  #0 and #1 are pre-trusted; #2 is not.
-                  #1 is pre-trusted four times more than #0.
-
-                  Pre-trust strength (`alpha`) is 0.1.
-
-                  Iteration threshold (`epsilon`) is absent;
-                  then the server uses a default value
-                  based upon the number of peers (3).
-                value:
-                  localTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        j: 1
-                        v: 0.25
-                      - i: 0
-                        j: 2
-                        v: 0.75
-                      - i: 1
-                        j: 2
-                        v: 1.0
-                      - i: 2
-                        j: 0
-                        v: 1.0
-                  preTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        v: 0.2
-                      - i: 1
-                        v: 0.8
-                  alpha: 0.1
-              Simple2:
-                summary: Simple 3-peer example with (unnecessarily) fine epsilon
-                description: |
-                  This example is the same as the previous example, except:
-
-                  - Values are scaled differently;
-                  - Iteration threshold value (`epsilon`) is given explicitly.
-
-                  That is, the trust levels by the same peer (#0 in this case)
-                  do not have to be pre-scaled or canonicalized by the client;
-                  only their relative magnitude matters.
-
-                  The explicit iteration threshold
-                  (`epsilon=1e-10`, or 0.0000000001)
-                  is much finer than the size-based default
-                  (`1e-6 / 3`, or 0.000003…),
-                  so it will take more iterations than the previous example,
-                  but will result in more accurate ranking,
-                  especially among lower-ranked peers near the tail.
-
-                  In this example of only 3 peers though,
-                  `epsilon=1e-10` is definitely an overkill:
-                  The relative ranking among peers #0–#2 will not change
-                  after only a few iterations.
-
-                  Developers are encouraged to experiment
-                  and tune `epsilon` to their needs,
-                  e.g. if only the top few clear winners are needed,
-                  a coarser (larger) `epsilon` will likely suffice.
-                value:
-                  localTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        j: 1
-                        v: 1.0
-                      - i: 0
-                        j: 2
-                        v: 3.0
-                      - i: 1
-                        j: 2
-                        v: 1.0
-                      - i: 2
-                        j: 0
-                        v: 1.0
-                  preTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        v: 1.0
-                      - i: 1
-                        v: 4.0
-                  alpha: 0.1
-                  epsilon: 1e-10
-              MissingLocalTrust:
-                summary: A 3-peer example with missing local trust by a peer
-                description: |
-                  In this example, local trust by #2 is missing/unknown.
-                  Per EigenTrust algorithm,
-                  it is assumed to be the same as the pre-trust.
-                  That is, #2 is assumed to trust #0 and #1,
-                  trusting #1 four times as much as #0.
-                value:
-                  localTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        j: 1
-                        v: 1.0
-                      - i: 0
-                        j: 2
-                        v: 3.0
-                      - i: 1
-                        j: 2
-                        v: 1.0
-                  preTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        v: 1.0
-                      - i: 1
-                        v: 4.0
-                  alpha: 0.1
-              MissingLocalTrustAndPreTrust:
-                summary: A 3-peer example with missing local trust and pre-trust
-                description: |
-                  In this example, not just #2's local trust but also the
-                  pre-trust is missing.
-                  Per EigenTrust algorithm,
-                  a uniform pre-trust is used if no pre-trust is specified,
-                  that is, peers #0–#2 are pre-trusted equally.
-                  Then in turn, the missing local trust by #2
-                  is assumed to be the same as the pre-trust,
-                  i.e. #2 is assumed to trust everyone equally.
-                value:
-                  localTrust:
-                    scheme: "inline"
-                    size: 3
-                    entries:
-                      - i: 0
-                        j: 1
-                        v: 1.0
-                      - i: 0
-                        j: 2
-                        v: 3.0
-                      - i: 1
-                        j: 2
-                        v: 1.0
-                  alpha: 0.1
+        $ref: '#/components/requestBodies/ComputeRequestBody'
       responses:
         "200":
           description: |
@@ -277,6 +95,23 @@ paths:
                       "scheme": "inline",
                       "size": 3
                     }
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+  /compute-with-stats:
+    post:
+      summary: Compute EigenTrust scores, with execution statistics
+      description: |
+        Compute EigenTrust scores using the given inputs.
+
+        See /compute for details.
+        The only difference is that not just the EigenTrust scores but also
+        statistics and rankings are returned.
+      operationId: computeWithStats
+      requestBody:
+        $ref: '#/components/requestBodies/ComputeRequestBody'
+      responses:
+        "200":
+          $ref: '#/components/responses/ComputeWithStatsResponseOK'
         "400":
           $ref: "#/components/responses/InvalidRequest"
 components:
@@ -458,7 +293,273 @@ components:
           v: 1.0
         - i: 2
           v: 0.5
+  requestBodies:
+    ComputeRequestBody:
+      description: |
+        Parameters for a compute request.
+      required: true
+      content:
+        "application/json":
+          schema:
+            type: object
+            required:
+              - localTrust
+            properties:
+              localTrust:
+                $ref: "#/components/schemas/LocalTrustRef"
+              preTrust:
+                $ref: "#/components/schemas/TrustVectorRef"
+              alpha:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+                default: 0.5
+              epsilon:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+              flatTail:
+                description: |
+                  The length of the flat tail
+                  (ranking unchanged from previous iteration)
+                  that must be seen before terminating the recursion.
+                  0 means a flat tail need not be seen,
+                  and the recursion is terminated solely based upon epsilon.
+                type: integer
+                minimum: 0
+              numLeaders:
+                description: |
+                  The number of top-ranking peers to consider
+                  for the purpose of flat-tail algorithm.  0 means everyone.
+                type: integer
+                minimum: 0
+          examples:
+            Simple1:
+              summary: Simple 3-peer example
+              description: |
+                This example passes a local trust of 3 peers (#0–#2), where:
+
+                - #0 trusts #1,
+                - #0 also trusts #2 – twice as much as #1,
+                - #1 trusts #2, and
+                - #2 trusts #0, i.e. reciprocates #0's trust.
+
+                #0 and #1 are pre-trusted; #2 is not.
+                #1 is pre-trusted four times more than #0.
+
+                Pre-trust strength (`alpha`) is 0.1.
+
+                Iteration threshold (`epsilon`) is absent;
+                then the server uses a default value
+                based upon the number of peers (3).
+              value:
+                localTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      j: 1
+                      v: 0.25
+                    - i: 0
+                      j: 2
+                      v: 0.75
+                    - i: 1
+                      j: 2
+                      v: 1.0
+                    - i: 2
+                      j: 0
+                      v: 1.0
+                preTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      v: 0.2
+                    - i: 1
+                      v: 0.8
+                alpha: 0.1
+            Simple2:
+              summary: Simple 3-peer example with (unnecessarily) fine epsilon
+              description: |
+                This example is the same as the previous example, except:
+
+                - Values are scaled differently;
+                - Iteration threshold value (`epsilon`) is given explicitly.
+
+                That is, the trust levels by the same peer (#0 in this case)
+                do not have to be pre-scaled or canonicalized by the client;
+                only their relative magnitude matters.
+
+                The explicit iteration threshold
+                (`epsilon=1e-10`, or 0.0000000001)
+                is much finer than the size-based default
+                (`1e-6 / 3`, or 0.000003…),
+                so it will take more iterations than the previous example,
+                but will result in more accurate ranking,
+                especially among lower-ranked peers near the tail.
+
+                In this example of only 3 peers though,
+                `epsilon=1e-10` is definitely an overkill:
+                The relative ranking among peers #0–#2 will not change
+                after only a few iterations.
+
+                Developers are encouraged to experiment
+                and tune `epsilon` to their needs,
+                e.g. if only the top few clear winners are needed,
+                a coarser (larger) `epsilon` will likely suffice.
+              value:
+                localTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      j: 1
+                      v: 1.0
+                    - i: 0
+                      j: 2
+                      v: 3.0
+                    - i: 1
+                      j: 2
+                      v: 1.0
+                    - i: 2
+                      j: 0
+                      v: 1.0
+                preTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      v: 1.0
+                    - i: 1
+                      v: 4.0
+                alpha: 0.1
+                epsilon: 1e-10
+            MissingLocalTrust:
+              summary: A 3-peer example with missing local trust by a peer
+              description: |
+                In this example, local trust by #2 is missing/unknown.
+                Per EigenTrust algorithm,
+                it is assumed to be the same as the pre-trust.
+                That is, #2 is assumed to trust #0 and #1,
+                trusting #1 four times as much as #0.
+              value:
+                localTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      j: 1
+                      v: 1.0
+                    - i: 0
+                      j: 2
+                      v: 3.0
+                    - i: 1
+                      j: 2
+                      v: 1.0
+                preTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      v: 1.0
+                    - i: 1
+                      v: 4.0
+                alpha: 0.1
+            MissingLocalTrustAndPreTrust:
+              summary: A 3-peer example with missing local trust and pre-trust
+              description: |
+                In this example, not just #2's local trust but also the
+                pre-trust is missing.
+                Per EigenTrust algorithm,
+                a uniform pre-trust is used if no pre-trust is specified,
+                that is, peers #0–#2 are pre-trusted equally.
+                Then in turn, the missing local trust by #2
+                is assumed to be the same as the pre-trust,
+                i.e. #2 is assumed to trust everyone equally.
+              value:
+                localTrust:
+                  scheme: "inline"
+                  size: 3
+                  entries:
+                    - i: 0
+                      j: 1
+                      v: 1.0
+                    - i: 0
+                      j: 2
+                      v: 3.0
+                    - i: 1
+                      j: 2
+                      v: 1.0
+                alpha: 0.1
+
   responses:
+    ComputeWithStatsResponseOK:
+      description: |
+        Successfully computed the EigenTrust scores.
+
+        The response body contains the computed scores as well as various
+        statistics and rankings (many related to the flat-tail algorithm).
+      content:
+        "application/json":
+          schema:
+            type: object
+            required:
+              - eigenTrust
+              - flatTailStats
+            properties:
+              eigenTrust:
+                $ref: "#/components/schemas/TrustVectorRef"
+              flatTailStats:
+                description: Flat-tail algorithm stats and peer ranking.
+                type: object
+                required:
+                  - length
+                  - threshold
+                  - deltaNorm
+                  - ranking
+                properties:
+                  length:
+                    description: |
+                      The flat-tail length (say, L, then
+                      the last L+1 iterations had the same ranking).
+                      This is the number of iterations that could be saved
+                      by using flat-tail algorithm
+                      (passing flatTail equal to the threshold stat below)
+                      while achieving the same result.
+                    type: integer
+                    minimum: 0
+                  threshold:
+                    description: |
+                      The suggested minimum threshold parameter (flatTail).
+                      It is determined from false flat tails observed.
+                      Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
+                      (each letter is a distinct ranking) before epsilon was reached,
+                      both DD and EEEE are false flat tails
+                      of length 1 and 3 respectively.
+                      In this case, Threshold=4 is suggested in order to ignore
+                      these false flat tails.
+                    type: integer
+                    minimum: 0
+                  deltaNorm:
+                    description: |
+                      The d value as of the head of the last flat-tail.
+                      This can be used to fine-tune epsilon
+                      even when not using flat-tail algorithm.
+                    type: number
+                    format: double
+                    minimum: 0
+                  ranking:
+                    description: |
+                      The sorted ranking of peer indices.
+                      Peers not found here have zero global trust.
+                    type: array
+                    items:
+                      type: integer
+                      minimum: 0
+
+
     InvalidRequest:
       description: |
         Client sent an invalid request.

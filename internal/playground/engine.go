@@ -160,7 +160,8 @@ func calculate(gc *gin.Context) error {
 		return errors.Wrap(err, "cannot canonicalize local trust")
 	}
 	trustScores, err := basic.Compute(gc.Request.Context(),
-		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15, nil, nil)
+		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15, nil, nil,
+		0, 0, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute EigenTrust scores")
 	}

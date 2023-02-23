@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -25,11 +26,14 @@ var (
 		Args:  cobra.MatchAll(cobra.NoArgs),
 		Run:   runBasicCompute,
 	}
-	localTrustURI  string
-	preTrustURI    string
-	alpha          float64
-	epsilon        float64
-	outputFilename string
+	localTrustURI         string
+	preTrustURI           string
+	alpha                 float64
+	epsilon               float64
+	flatTail              int
+	numLeaders            int
+	outputFilename        string
+	flatTailStatsFilename string
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -253,7 +257,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if epsilon == 0 {
 		epsilonP = nil
 	}
-	requestBody := basic.ComputeJSONRequestBody{
+	requestBody := basic.ComputeWithStatsJSONRequestBody{
 		Alpha:    &alpha,
 		Epsilon:  epsilonP,
 		PreTrust: nil,
@@ -272,7 +276,9 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		}
 		requestBody.PreTrust = &preTrustRef
 	}
-	resp, err := client.ComputeWithResponse(ctx, requestBody)
+	requestBody.FlatTail = &flatTail
+	requestBody.NumLeaders = &numLeaders
+	resp, err := client.ComputeWithStatsWithResponse(ctx, requestBody)
 	if err != nil {
 		logger.Err(err).Msg("request failed")
 		return
@@ -281,7 +287,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	case 200:
 		if resp.JSON200 == nil {
 			logger.Error().Msg("cannot recover HTTP 200 response")
-		} else if inlineEigenTrust, err := resp.JSON200.AsInlineTrustVector(); err != nil {
+		} else if inlineEigenTrust, err := resp.JSON200.EigenTrust.AsInlineTrustVector(); err != nil {
 			logger.Error().Msg("cannot parse response")
 		} else {
 			var writer io.Writer = os.Stdout
@@ -309,6 +315,26 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 			csvWriter.Flush()
 			if csvWriter.Error() != nil {
 				logger.Err(err).Msg("cannot flush output file")
+			}
+			var statWriter io.Writer
+			closeStats := func() {}
+			if flatTailStatsFilename == "-" {
+				statWriter = os.Stdout
+			} else if flatTailStatsFilename != "" {
+				f, err := os.OpenFile(flatTailStatsFilename,
+					os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o777)
+				if err != nil {
+					logger.Err(err).Msg("cannot open flat-tail stats file")
+					return
+				}
+				statWriter = f
+				closeStats = func() { _ = f.Close() }
+			}
+			defer closeStats()
+			jsonEncoder := json.NewEncoder(statWriter)
+			if err := jsonEncoder.Encode(resp.JSON200.FlatTailStats); err != nil {
+				logger.Err(err).Msg("cannot write flat-tail stats file")
+				return
 			}
 		}
 	case 400:
@@ -339,7 +365,17 @@ If not given, server uses uniform trust vector by default.`)
 Higher value biases the computation toward pre-trust.`)
 	basicComputeCmd.Flags().Float64VarP(&epsilon, "epsilon", "e", 0.0,
 		`Epsilon (error max).  0 (default) uses server default.`)
+	basicComputeCmd.Flags().IntVar(&flatTail, "flat-tail", 0,
+		`Flat-tail threshold length. 0 (default) disables flat-tail algorithm.`)
+	basicComputeCmd.Flags().IntVar(&numLeaders, "num-leaders", 0,
+		`Number of top-ranking peers (leaders) to consider
+for flat-tail algorithm and stats.
+0 (default) includes all peers.`)
 	basicComputeCmd.Flags().StringVarP(&outputFilename, "output", "o",
 		"-",
-		`Output file name; "-" (default) uses standard output"`)
+		`Output file name; "-" (default) uses standard output`)
+	basicComputeCmd.Flags().StringVar(&flatTailStatsFilename, "flat-tail-stats",
+		"",
+		`Flat tail stats output file name.
+"" (default) suppresses output; "-" uses standard output`)
 }
