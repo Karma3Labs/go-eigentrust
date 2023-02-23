@@ -22,23 +22,11 @@ func (v *Vector) NNZ() int {
 	return len(v.Entries)
 }
 
-type entrySort []Entry
-
-func (a entrySort) Len() int           { return len(a) }
-func (a entrySort) Less(i, j int) bool { return a[i].Index < a[j].Index }
-func (a entrySort) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-
-func sortEntries(entries []Entry) []Entry {
-	entries = append(entries[:0:0], entries...)
-	sort.Sort(entrySort(entries))
-	return entries
-}
-
 // NewVector creates and returns a new sparse vector with given entries.
 func NewVector(dim int, entries []Entry) *Vector {
 	return &Vector{
 		Dim:     dim,
-		Entries: sortEntries(entries),
+		Entries: SortEntries(entries),
 	}
 }
 
