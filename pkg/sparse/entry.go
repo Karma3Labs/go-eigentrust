@@ -65,7 +65,6 @@ func (a entrySort) Less(i, j int) bool { return a[i].Index < a[j].Index }
 func (a entrySort) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func SortEntries(entries []Entry) []Entry {
-	entries = append(entries[:0:0], entries...)
 	sort.Sort(entrySort(entries))
 	return entries
 }
