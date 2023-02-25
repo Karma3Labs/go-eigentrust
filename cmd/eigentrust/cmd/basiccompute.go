@@ -218,7 +218,7 @@ func loadInlineTrustVectorCsv(
 		value, err = strconv.ParseFloat(fields[1], 64)
 		switch {
 		case err != nil:
-			return inputWrapf(err, 1, "invalid trust value=%#v", fields[2])
+			return inputWrapf(err, 1, "invalid trust value=%#v", fields[1])
 		case value < 0:
 			return inputErrorf(1, "negative value=%#v", value)
 		}
