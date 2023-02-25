@@ -4,6 +4,7 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -123,6 +124,9 @@ func (server *StrictServerImpl) Compute(
 	if err = tv.FromInlineTrustVector(itv); err != nil {
 		return nil, errors.Wrapf(err, "cannot create response")
 	}
+	c = nil
+	p = nil
+	runtime.GC()
 	return Compute200JSONResponse(tv), nil
 }
 

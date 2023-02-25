@@ -4,6 +4,7 @@ package basic
 import (
 	"context"
 	"math"
+	"runtime"
 	"time"
 
 	"github.com/pkg/errors"
@@ -118,6 +119,7 @@ func Compute(
 				Msg("one iteration")
 		}
 		d0 = d
+		runtime.GC()
 	}
 	tm1 = time.Now()
 	durIter, tm0 := tm1.Sub(tm0), tm1
