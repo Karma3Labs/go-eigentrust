@@ -4,106 +4,42 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
-	"gonum.org/v1/gonum/mat"
+	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
-// LocalTrust is the local trust matrix.
-type LocalTrust interface {
-	mat.Mutable
-
-	// Dim returns the receiver's (square) dimension.
-	Dim() int
-
-	// Cap returns the receiver's (square) capacity.
-	Cap() int
-
-	// Grow returns the receiver expanded by n rows and n columns.
-	// See [mat.Dense.Grow] for details.
-	Grow(n int) LocalTrust
-
-	// Canonicalize canonicalizes the receiver,
-	// i.e. scales each row so that its entries sum to one.
-	//
-	// Zero rows are replaced by trustVector vector.
-	//
-	// Canonicalize returns the canonicalized matrix;
-	// the receiver remains unchanged.
-	//
-	// The receiver and trustVector must have the same dimension.
-	Canonicalize(preTrust TrustVector) (LocalTrust, error)
-}
-
-type localTrust struct {
-	m *mat.Dense
-}
-
-func (l *localTrust) Set(i, j int, v float64) {
-	if v < 0 {
-		panic("negative local trust value")
+// CanonicalizeLocalTrust canonicalizes localTrust in-place,
+// i.e. scales each row so that its entries sum to one.
+//
+// Zero rows are replaced by preTrust vector.
+//
+// The receiver and trustVector must have the same dimension.
+func CanonicalizeLocalTrust(
+	localTrust *sparse.Matrix, preTrust *sparse.Vector,
+) error {
+	n, err := localTrust.Dim()
+	if err != nil {
+		return err
 	}
-	l.m.Set(i, j, v)
-}
-
-func (l *localTrust) Dims() (r, c int) {
-	return l.m.Dims()
-}
-
-func (l *localTrust) At(i, j int) float64 {
-	return l.m.At(i, j)
-}
-
-func (l *localTrust) T() mat.Matrix {
-	return l.m.T()
-}
-
-func (l *localTrust) Dim() int {
-	n, _ := l.m.Dims()
-	return n
-}
-
-func (l *localTrust) Cap() int {
-	n, _ := l.m.Caps()
-	return n
-}
-
-func (l *localTrust) Grow(n int) LocalTrust {
-	// TODO(ek): Don't depend on that [mat.(*Dense).Grow] returns *mat.Dense.
-	m := l.m.Grow(n, n).(*mat.Dense)
-	if m == l.m {
-		return l
+	if n != preTrust.Dim {
+		return sparse.ErrDimensionMismatch
 	}
-	return &localTrust{m: m}
-}
-
-func (l *localTrust) Canonicalize(preTrust TrustVector) (LocalTrust, error) {
-	n := l.Dim()
-	if n != preTrust.Len() {
-		return nil, ErrDimensionMismatch
-	}
-	l2 := &localTrust{m: mat.NewDense(n, n, nil)}
 	for i := 0; i < n; i++ {
-		inRow := l.m.RawRowView(i)
-		outRow := l2.m.RawRowView(i)
-		switch _, err := Canonicalize(inRow, outRow); err {
+		inRow := localTrust.RowVector(i)
+		switch err := Canonicalize(inRow.Entries); err {
 		case nil:
-		case ErrZeroSum:
-			l2.m.SetRow(i, preTrust.Components())
+		case sparse.ErrZeroSum:
+			localTrust.SetRowVector(i, preTrust)
 		default:
-			return nil, err
+			return err
 		}
 	}
-	return l2, nil
-}
-
-// NewEmptyLocalTrust creates and returns a new local trust object.
-func NewEmptyLocalTrust() LocalTrust {
-	return &localTrust{m: &mat.Dense{}}
+	return nil
 }
 
 // ReadLocalTrustFromCsv reads a local trust matrix from the given CSV file.
 func ReadLocalTrustFromCsv(
 	reader CsvReader, peerIndices map[string]int,
-) (LocalTrust, error) {
+) (*sparse.Matrix, error) {
 	parseFields := func(fields []string) (
 		from int, to int, level float64, err error,
 	) {
@@ -124,9 +60,10 @@ func ReadLocalTrustFromCsv(
 		}
 		return
 	}
-	lt := NewEmptyLocalTrust()
 	count := 0
 	fields, err := reader.Read()
+	var entries []sparse.CooEntry
+	maxFrom, maxTo := -1, -1
 	for ; err == nil; fields, err = reader.Read() {
 		count++
 		from, to, level, err := parseFields(fields)
@@ -134,19 +71,26 @@ func ReadLocalTrustFromCsv(
 			return nil, errors.Wrapf(err,
 				"cannot parse local trust CSV record #%d", count)
 		}
-		n := from
-		if n < to {
-			n = to
+		if maxFrom < from {
+			maxFrom = from
 		}
-		n++
-		if lt.Dim() < n {
-			lt = lt.Grow(n - lt.Dim())
+		if maxTo < to {
+			maxTo = to
 		}
-		lt.Set(from, to, level)
+		entries = append(entries, sparse.CooEntry{
+			Row:    from,
+			Column: to,
+			Value:  level,
+		})
 	}
 	if err != io.EOF {
 		return nil, errors.Wrapf(err,
 			"cannot read local trust CSV record #%d", count+1)
 	}
-	return lt, nil
+	maxIndex := maxFrom
+	if maxIndex < maxTo {
+		maxIndex = maxTo
+	}
+	dim := maxIndex + 1
+	return sparse.NewCSRMatrix(dim, dim, entries), nil
 }

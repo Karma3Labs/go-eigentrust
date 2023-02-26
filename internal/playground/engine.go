@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/sparse"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -76,8 +77,8 @@ func calculate(gc *gin.Context) error {
 	var (
 		peerNames   []string
 		peerIndices map[string]int
-		localTrust  basic.LocalTrust
-		preTrust    basic.TrustVector
+		localTrust  *sparse.Matrix
+		preTrust    *sparse.Vector
 	)
 	if hasPeerNames {
 		f, err := peerNamesFile.Open()
@@ -114,37 +115,52 @@ func calculate(gc *gin.Context) error {
 			return errors.Wrap(err, "cannot read personal trust file")
 		}
 	}
+	ltDim, err := localTrust.Dim()
+	if err != nil {
+		return err
+	}
 	if hasPeerNames {
 		// peer name files are the authoritative source of dimension
 		n := len(peerNames)
 		switch {
-		case localTrust.Dim() < n:
-			localTrust = localTrust.Grow(n - localTrust.Dim())
-		case localTrust.Dim() > n:
-			panic("localTrust is larger than peerNames")
+		case ltDim < n:
+			localTrust.SetDim(n, n)
+		case ltDim > n:
+			return errors.New("localTrust is larger than peerNames")
 		}
 		switch {
-		case preTrust.Len() < n:
-			preTrust = preTrust.Grow(n - preTrust.Len())
-		case preTrust.Len() > n:
-			panic("preTrust is larger than peerNames")
+		case preTrust.Dim < n:
+			preTrust.SetDim(n)
+		case preTrust.Dim > n:
+			return errors.New("preTrust is larger than peerNames")
 		}
 	} else {
 		// grow the smaller one
 		switch {
-		case localTrust.Dim() < preTrust.Len():
-			localTrust = localTrust.Grow(preTrust.Len() - localTrust.Dim())
-		case preTrust.Len() < localTrust.Dim():
-			preTrust = preTrust.Grow(localTrust.Dim() - preTrust.Len())
+		case ltDim < preTrust.Dim:
+			localTrust.SetDim(preTrust.Dim, preTrust.Dim)
+		case preTrust.Dim < ltDim:
+			preTrust.SetDim(ltDim)
 		}
 	}
-	p := preTrust.Canonicalize()
-	c, err := localTrust.Canonicalize(p)
+	dim := preTrust.Dim
+	preTrusted := make([]bool, len(preTrust.Entries))
+	for _, e := range preTrust.Entries {
+		preTrusted[e.Index] = true
+	}
+	numLocalTrusts := 0
+	for _, row := range localTrust.Entries {
+		numLocalTrusts += len(row)
+	}
+	localTrustDensity := float64(numLocalTrusts) / float64(preTrust.Dim) / float64(preTrust.Dim)
+
+	basic.CanonicalizeTrustVector(preTrust)
+	err = basic.CanonicalizeLocalTrust(localTrust, preTrust)
 	if err != nil {
 		return errors.Wrap(err, "cannot canonicalize local trust")
 	}
 	trustScores, err := basic.Compute(gc.Request.Context(),
-		c, p, float64(hunchPercent)/100.0, 1e-15, nil, nil)
+		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15, nil, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute EigenTrust scores")
 	}
@@ -157,39 +173,25 @@ func calculate(gc *gin.Context) error {
 		}
 	}
 
-	nr, nc := localTrust.Dims()
 	var entries []Entry
-	for i := 0; i < nr; i++ {
-		score := trustScores.AtVec(i)
+	for i := 0; i < dim; i++ {
 		entries = append(entries,
 			Entry{
 				Index:    i,
 				Name:     getPeerName(i),
-				Score:    score,
-				ScoreLog: math.Log10(score),
+				Score:    0,
+				ScoreLog: math.Inf(-1),
 			})
 	}
-	sort.Sort(ByScore(entries))
-	preTrusted := make([]bool, nr)
-	np := preTrust.Len()
-	for i := 0; i < np; i++ {
-		if preTrust.AtVec(i) > 0 {
-			preTrusted[i] = true
-		}
+	for _, e := range trustScores.Entries {
+		entries[e.Index].Score = e.Value
+		entries[e.Index].ScoreLog = math.Log10(e.Value)
 	}
+	sort.Sort(ByScore(entries))
 	peerNamesFileName := ""
 	if hasPeerNames {
 		peerNamesFileName = peerNamesFile.Filename
 	}
-	numLocalTrusts := 0
-	for i := 0; i < nr; i++ {
-		for j := 0; j < nc; j++ {
-			if localTrust.At(i, j) > 0 {
-				numLocalTrusts++
-			}
-		}
-	}
-	localTrustDensity := float64(numLocalTrusts) / float64(nr) / float64(nr)
 	gc.HTML(http.StatusOK, "result.html",
 		gin.H{
 			"PeerNamesFileName":        peerNamesFileName,
