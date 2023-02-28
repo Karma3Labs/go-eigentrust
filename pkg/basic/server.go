@@ -107,6 +107,9 @@ func (server *StrictServerImpl) compute(
 	}
 	t, err := Compute(ctx, c, p, *alpha, *epsilon, nil, nil,
 		*flatTail, *numLeaders, &flatTailStats)
+	c = nil
+	p = nil
+	runtime.GC()
 	if err != nil {
 		err = errors.Wrapf(err, "cannot compute EigenTrust")
 		return
@@ -141,9 +144,6 @@ func (server *StrictServerImpl) Compute(
 		}
 		return nil, err
 	}
-	c = nil
-	p = nil
-	runtime.GC()
 	return Compute200JSONResponse(tv), nil
 }
 
