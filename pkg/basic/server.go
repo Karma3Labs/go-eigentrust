@@ -166,9 +166,10 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 		})
 	}
 	// reset after move
+	size := inline.Size
 	inline.Size = 0
 	inline.Entries = nil
-	return sparse.NewCSRMatrix(inline.Size, inline.Size, entries), nil
+	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
 func loadTrustVector(ref *TrustVectorRef) (*sparse.Vector, error) {
@@ -192,7 +193,8 @@ func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
 		entries = append(entries, sparse.Entry{Index: entry.I, Value: entry.V})
 	}
 	// reset after move
+	size := inline.Size
 	inline.Size = 0
 	inline.Entries = nil
-	return sparse.NewVector(inline.Size, entries), nil
+	return sparse.NewVector(size, entries), nil
 }
