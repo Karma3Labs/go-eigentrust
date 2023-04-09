@@ -26,7 +26,7 @@ func (v *Vector) NNZ() int {
 func NewVector(dim int, entries []Entry) *Vector {
 	return &Vector{
 		Dim:     dim,
-		Entries: SortEntries(append(entries[:0:0], entries...)),
+		Entries: SortEntriesByIndex(append(entries[:0:0], entries...)),
 	}
 }
 
@@ -274,7 +274,7 @@ Loop:
 			}
 		}
 	}
-	sort.Sort(entrySort(sortedEntries))
+	sort.Sort(EntriesByIndex(sortedEntries))
 	v.Dim = dim
 	v.Entries = sortedEntries
 	return nil

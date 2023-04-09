@@ -4,6 +4,7 @@ package basic
 import (
 	"context"
 	"math"
+	"reflect"
 	"runtime"
 	"time"
 
@@ -43,12 +44,31 @@ func Canonicalize(entries []sparse.Entry) error {
 // except if t0 (initial trust vector) is not nil,
 // Compute uses t0 instead of p.
 //
+// Alpha (a) and epsilon (e) are the pre-trust bias and iteration threshold,
+// as defined in the EigenTrust paper.
+//
+// Compute terminates EigenTrust iterations when two conditions are (both) met:
+//
+//   - Convergence stability: The Frobenius norm of trust vector delta
+//     falls below epsilon threshold.
+//   - Ranking stability: The overall sorted ranking of top numLeaders peers
+//     remains unchanged for flatTail+1 iterations.
+//     numLeaders=0 means all peers are significant, i.e. numLeaders=c.Dim()
+//
+// To disable either of these checks in order to use the other criterion only,
+// pass e=1 or flatTail=0.
+//
 // Compute stores the result (EigenTrust scores) in t and returns it.
 // If t is nil, Compute allocates one first and returns it.
+//
+// If a flatTailStats struct is passed,
+// Compute populates it with flat-tail algorithm stats upon completion.
+// See the flat-tail algorithm description for details.
 func Compute(
-	ctx context.Context, c *sparse.Matrix, p *sparse.Vector, a float64,
-	e float64,
+	ctx context.Context, c *sparse.Matrix, p *sparse.Vector,
+	a float64, e float64,
 	t0 *sparse.Vector, t *sparse.Vector,
+	flatTail int, numLeaders int, flatTailStats *FlatTailStats,
 ) (*sparse.Vector, error) {
 	logger, hasLogger := util.LoggerInContext(ctx)
 	if hasLogger {
@@ -73,7 +93,9 @@ func Compute(
 	if e <= 0 {
 		return nil, errors.Errorf("epsilon %#v is not positive", e)
 	}
-
+	if numLeaders == 0 {
+		numLeaders = n
+	}
 	if t0 == nil {
 		t0 = p
 	}
@@ -89,8 +111,15 @@ func Compute(
 	ap.ScaleVec(a, p)
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
+	if flatTailStats == nil {
+		flatTailStats = &FlatTailStats{}
+	}
+	flatTailStats.Length = 0
+	flatTailStats.Threshold = 1
+	flatTailStats.DeltaNorm = 1
+	flatTailStats.Ranking = nil
 	iter := 0
-	for ; d > e; iter++ {
+	for ; d > e || (flatTailStats.Length < flatTail); iter++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -119,6 +148,30 @@ func Compute(
 				Msg("one iteration")
 		}
 		d0 = d
+		entries := sparse.SortEntriesByValue(
+			append(t1.Entries[:0:0], t1.Entries...))
+		ranking := make([]int, 0, len(entries))
+		for _, entry := range entries {
+			ranking = append(ranking, entry.Index)
+		}
+		if len(ranking) > numLeaders {
+			ranking = ranking[:numLeaders]
+		}
+		if reflect.DeepEqual(ranking, flatTailStats.Ranking) {
+			flatTailStats.Length++
+		} else {
+			if hasLogger && flatTailStats.Length > 0 {
+				logger.Trace().
+					Int("length", flatTailStats.Length).
+					Msg("false flat tail detected")
+			}
+			if flatTailStats.Threshold <= flatTailStats.Length {
+				flatTailStats.Threshold = flatTailStats.Length + 1
+			}
+			flatTailStats.Length = 0
+			flatTailStats.DeltaNorm = d
+			flatTailStats.Ranking = ranking
+		}
 		runtime.GC()
 	}
 	tm1 = time.Now()
@@ -129,10 +182,17 @@ func Compute(
 			Int("nnz", ct.NNZ()).
 			Float64("alpha", a).
 			Float64("epsilon", e).
+			Int("flatTail", flatTail).
+			Int("numLeaders", numLeaders).
 			Int("iterations", iter).
 			Dur("durPrep", durPrep).
 			Dur("durIter", durIter).
 			Msg("finished")
+		logger.Trace().
+			Int("length", flatTailStats.Length).
+			Int("threshold", flatTailStats.Threshold).
+			Float64("deltaNorm", flatTailStats.DeltaNorm).
+			Msg("flat tail stats")
 	}
 	if t == nil {
 		t = t1

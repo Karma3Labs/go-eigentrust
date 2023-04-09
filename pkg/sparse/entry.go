@@ -58,13 +58,24 @@ func (a CSCEntriesSort) Less(i, j int) bool {
 	return false
 }
 
-type entrySort []Entry
+type EntriesByIndex []Entry
 
-func (a entrySort) Len() int           { return len(a) }
-func (a entrySort) Less(i, j int) bool { return a[i].Index < a[j].Index }
-func (a entrySort) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a EntriesByIndex) Len() int           { return len(a) }
+func (a EntriesByIndex) Less(i, j int) bool { return a[i].Index < a[j].Index }
+func (a EntriesByIndex) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
-func SortEntries(entries []Entry) []Entry {
-	sort.Sort(entrySort(entries))
+func SortEntriesByIndex(entries []Entry) []Entry {
+	sort.Sort(EntriesByIndex(entries))
+	return entries
+}
+
+type EntriesByValue []Entry
+
+func (a EntriesByValue) Len() int           { return len(a) }
+func (a EntriesByValue) Less(i, j int) bool { return a[i].Value < a[j].Value }
+func (a EntriesByValue) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+func SortEntriesByValue(entries []Entry) []Entry {
+	sort.Sort(EntriesByValue(entries))
 	return entries
 }

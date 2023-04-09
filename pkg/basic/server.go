@@ -16,60 +16,44 @@ type StrictServerImpl struct {
 	Logger zerolog.Logger
 }
 
-func make400(message string) (resp Compute400JSONResponse) {
-	resp.Message = message
-	return
+type Error400 struct {
+	Inner error
 }
 
-func format400(format string, v ...interface{}) (resp Compute400JSONResponse) {
-	resp.Message = fmt.Sprintf(format, v...)
-	return
+func (e Error400) Error() string {
+	return fmt.Sprintf("400 Bad Request: %s", e.Inner.Error())
 }
 
-func errorTo400(err error) (resp Compute400JSONResponse) {
-	return make400(err.Error())
-}
-
-func wrapIn400(err error, message string) (resp Compute400JSONResponse) {
-	return errorTo400(errors.Wrap(err, message))
-}
-
-func wrapfIn400(
-	err error, format string, v ...interface{},
-) (resp Compute400JSONResponse) {
-	return errorTo400(errors.Wrapf(err, format, v...))
-}
-
-func (server *StrictServerImpl) Compute(
-	ctx context.Context, request ComputeRequestObject,
-) (ComputeResponseObject, error) {
-	ctx = util.SetLoggerInContext(ctx, server.Logger)
+func (server *StrictServerImpl) compute(
+	ctx context.Context, localTrustRef *LocalTrustRef, preTrust *TrustVectorRef,
+	alpha *float64, epsilon *float64,
+	flatTail *int, numLeaders *int,
+) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
 	logger := server.Logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
 		Logger()
 	var (
-		c       *sparse.Matrix
-		p       *sparse.Vector
-		alpha   float64
-		epsilon float64
-		err     error
+		c *sparse.Matrix
+		p *sparse.Vector
 	)
-	if c, err = server.loadLocalTrust(&request.Body.LocalTrust); err != nil {
-		return wrapIn400(err, "cannot load local trust"), nil
+	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
+		err = Error400{errors.Wrap(err, "cannot load local trust")}
+		return
 	}
 	cDim, err := c.Dim()
 	if err != nil {
-		return nil, err
+		return
 	}
 	logger.Trace().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
-	if request.Body.PreTrust == nil {
+	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
-	} else if p, err = loadTrustVector(request.Body.PreTrust); err != nil {
-		return wrapIn400(err, "cannot load pre-trust"), nil
+	} else if p, err = loadTrustVector(preTrust); err != nil {
+		err = Error400{errors.Wrap(err, "cannot load pre-trust")}
+		return
 	} else {
 		// align dimensions
 		switch {
@@ -85,33 +69,50 @@ func (server *StrictServerImpl) Compute(
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
 	if cDim != p.Dim {
-		return format400("local trust size %d != pre-trust size %d",
-			cDim, p.Dim), nil
-	}
-	if request.Body.Alpha == nil {
-		alpha = 0.5
-	} else {
-		alpha = *request.Body.Alpha
-		if alpha < 0 || alpha > 1 {
-			return format400("alpha=%f out of range [0..1]", alpha), nil
+		err = Error400{
+			errors.Errorf("local trust size %d != pre-trust size %d",
+				cDim, p.Dim),
 		}
+		return
 	}
-	if request.Body.Epsilon == nil {
-		epsilon = 1e-6 / float64(cDim)
-	} else {
-		epsilon = *request.Body.Epsilon
-		if epsilon <= 0 || epsilon > 1 {
-			return format400("epsilon=%f out of range (0..1]", epsilon), nil
+	if alpha == nil {
+		a := 0.5
+		alpha = &a
+	} else if *alpha < 0 || *alpha > 1 {
+		err = Error400{errors.Errorf("alpha=%f out of range [0..1]", *alpha)}
+		return
+	}
+	if epsilon == nil {
+		e := 1e-6 / float64(cDim)
+		epsilon = &e
+	} else if *epsilon <= 0 || *epsilon > 1 {
+		err = Error400{
+			errors.Errorf("epsilon=%f out of range (0..1]", *epsilon),
 		}
+		return
+	}
+	if flatTail == nil {
+		ft := 0
+		flatTail = &ft
+	}
+	if numLeaders == nil {
+		nl := 0
+		numLeaders = &nl
 	}
 	CanonicalizeTrustVector(p)
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot canonicalize local trust")
+		err = Error400{errors.Wrapf(err, "cannot canonicalize local trust")}
+		return
 	}
-	t, err := Compute(ctx, c, p, alpha, epsilon, nil, nil)
+	t, err := Compute(ctx, c, p, *alpha, *epsilon, nil, nil,
+		*flatTail, *numLeaders, &flatTailStats)
+	c = nil
+	p = nil
+	runtime.GC()
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot compute EigenTrust")
+		err = errors.Wrapf(err, "cannot compute EigenTrust")
+		return
 	}
 	var itv InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
@@ -120,14 +121,55 @@ func (server *StrictServerImpl) Compute(
 		itv.Entries = append(itv.Entries,
 			InlineTrustVectorEntry{I: e.Index, V: e.Value})
 	}
-	var tv TrustVectorRef
 	if err = tv.FromInlineTrustVector(itv); err != nil {
-		return nil, errors.Wrapf(err, "cannot create response")
+		err = errors.Wrapf(err, "cannot create response")
+		return
 	}
-	c = nil
-	p = nil
-	runtime.GC()
+	return tv, flatTailStats, nil
+}
+
+func (server *StrictServerImpl) Compute(
+	ctx context.Context, request ComputeRequestObject,
+) (ComputeResponseObject, error) {
+	ctx = util.SetLoggerInContext(ctx, server.Logger)
+	tv, _, err := server.compute(ctx,
+		&request.Body.LocalTrust, request.Body.PreTrust,
+		request.Body.Alpha, request.Body.Epsilon,
+		request.Body.FlatTail, request.Body.NumLeaders)
+	if err != nil {
+		if error400, ok := err.(Error400); ok {
+			var resp Compute400JSONResponse
+			resp.Message = error400.Inner.Error()
+			return resp, nil
+		}
+		return nil, err
+	}
 	return Compute200JSONResponse(tv), nil
+}
+
+func (server *StrictServerImpl) ComputeWithStats(
+	ctx context.Context, request ComputeWithStatsRequestObject,
+) (ComputeWithStatsResponseObject, error) {
+	ctx = util.SetLoggerInContext(ctx, server.Logger)
+	tv, flatTailStats, err := server.compute(ctx,
+		&request.Body.LocalTrust, request.Body.PreTrust,
+		request.Body.Alpha, request.Body.Epsilon,
+		request.Body.FlatTail, request.Body.NumLeaders)
+	if err != nil {
+		if error400, ok := err.(Error400); ok {
+			var resp ComputeWithStats400JSONResponse
+			resp.Message = error400.Inner.Error()
+			return resp, nil
+		}
+		return nil, err
+	}
+	var resp ComputeWithStats200JSONResponse
+	resp.EigenTrust = tv
+	resp.FlatTailStats.Length = flatTailStats.Length
+	resp.FlatTailStats.Threshold = flatTailStats.Threshold
+	resp.FlatTailStats.DeltaNorm = flatTailStats.DeltaNorm
+	resp.FlatTailStats.Ranking = flatTailStats.Ranking
+	return resp, nil
 }
 
 func (server *StrictServerImpl) loadLocalTrust(
