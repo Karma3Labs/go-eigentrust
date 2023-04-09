@@ -113,7 +113,7 @@ func NewCSRMatrix(
 		})
 	}
 	for _, row := range entries2 {
-		sort.Sort(entrySort(row))
+		sort.Sort(EntriesByIndex(row))
 	}
 	return &CSRMatrix{
 		CSMatrix{

@@ -177,7 +177,8 @@ func Compute(
 				Msg("one iteration")
 		}
 		d0 = d
-		entries := sparse.SortEntries(t1.Entries)
+		entries := sparse.SortEntriesByValue(
+			append(t1.Entries[:0:0], t1.Entries...))
 		ranking := make([]int, 0, len(entries))
 		for _, entry := range entries {
 			ranking = append(ranking, entry.Index)
