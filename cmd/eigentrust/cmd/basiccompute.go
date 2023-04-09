@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 var (
@@ -244,6 +245,43 @@ func loadInlineTrustVectorCsv(
 	return nil
 }
 
+func writeOutput(
+	entries []basic.InlineTrustVectorEntry, filename string,
+) error {
+	file, err := util.OpenOutputFile(filename)
+	if err != nil {
+		return errors.Wrap(err, "cannot open output file")
+	}
+	defer file.Close()
+	csvWriter := csv.NewWriter(file)
+	for _, entry := range entries {
+		if err = csvWriter.Write([]string{
+			strconv.FormatInt(int64(entry.I), 10),
+			strconv.FormatFloat(entry.V, 'f', -1, 64),
+		}); err != nil {
+			return err
+		}
+	}
+	csvWriter.Flush()
+	if csvWriter.Error() != nil {
+		return errors.Wrap(err, "cannot flush output file")
+	}
+	return nil
+}
+
+func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
+	file, err := util.OpenOutputFile(filename)
+	if err != nil {
+		return errors.Wrapf(err, "cannot open flat-tail stats file for writing")
+	}
+	defer file.Close()
+	jsonEncoder := json.NewEncoder(file)
+	if err := jsonEncoder.Encode(stats); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	basicSetupEndpoint()
 	var err error
@@ -290,51 +328,15 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		} else if inlineEigenTrust, err := resp.JSON200.EigenTrust.AsInlineTrustVector(); err != nil {
 			logger.Error().Msg("cannot parse response")
 		} else {
-			var writer io.Writer = os.Stdout
-			closeOutput := func() {}
-			if outputFilename != "-" {
-				f, err := os.OpenFile(outputFilename,
-					os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o777)
-				if err != nil {
-					logger.Err(err).Msg("cannot open output file")
-					return
-				}
-				writer = f
-				closeOutput = func() { _ = f.Close() }
+			if err = writeOutput(
+				inlineEigenTrust.Entries, outputFilename,
+			); err != nil {
+				logger.Err(err).Msg("cannot write output file")
 			}
-			defer closeOutput()
-			csvWriter := csv.NewWriter(writer)
-			for _, entry := range inlineEigenTrust.Entries {
-				if err = csvWriter.Write([]string{
-					strconv.FormatInt(int64(entry.I), 10),
-					strconv.FormatFloat(entry.V, 'f', -1, 64),
-				}); err != nil {
-					logger.Err(err).Msg("cannot write to output file")
-				}
-			}
-			csvWriter.Flush()
-			if csvWriter.Error() != nil {
-				logger.Err(err).Msg("cannot flush output file")
-			}
-			var statWriter io.Writer
-			closeStats := func() {}
-			if flatTailStatsFilename == "-" {
-				statWriter = os.Stdout
-			} else if flatTailStatsFilename != "" {
-				f, err := os.OpenFile(flatTailStatsFilename,
-					os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o777)
-				if err != nil {
-					logger.Err(err).Msg("cannot open flat-tail stats file")
-					return
-				}
-				statWriter = f
-				closeStats = func() { _ = f.Close() }
-			}
-			defer closeStats()
-			jsonEncoder := json.NewEncoder(statWriter)
-			if err := jsonEncoder.Encode(resp.JSON200.FlatTailStats); err != nil {
+			if err = writeFlatTailStats(
+				resp.JSON200.FlatTailStats, flatTailStatsFilename,
+			); err != nil {
 				logger.Err(err).Msg("cannot write flat-tail stats file")
-				return
 			}
 		}
 	case 400:
@@ -373,7 +375,8 @@ for flat-tail algorithm and stats.
 0 (default) includes all peers.`)
 	basicComputeCmd.Flags().StringVarP(&outputFilename, "output", "o",
 		"-",
-		`Output file name; "-" (default) uses standard output`)
+		`Output file name.
+"" suppresses output; "-" (default) uses standard output`)
 	basicComputeCmd.Flags().StringVar(&flatTailStatsFilename, "flat-tail-stats",
 		"",
 		`Flat tail stats output file name.
