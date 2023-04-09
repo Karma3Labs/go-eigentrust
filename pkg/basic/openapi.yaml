@@ -293,6 +293,53 @@ components:
           v: 1.0
         - i: 2
           v: 0.5
+    FlatTailStats:
+      description: Flat-tail algorithm stats and peer ranking.
+      type: object
+      required:
+        - length
+        - threshold
+        - deltaNorm
+        - ranking
+      properties:
+        length:
+          description: |
+            The flat-tail length (say, L, then
+            the last L+1 iterations had the same ranking).
+            This is the number of iterations that could be saved
+            by using flat-tail algorithm
+            (passing flatTail equal to the threshold stat below)
+            while achieving the same result.
+          type: integer
+          minimum: 0
+        threshold:
+          description: |
+            The suggested minimum threshold parameter (flatTail).
+            It is determined from false flat tails observed.
+            Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
+            (each letter is a distinct ranking) before epsilon was reached,
+            both DD and EEEE are false flat tails
+            of length 1 and 3 respectively.
+            In this case, Threshold=4 is suggested in order to ignore
+            these false flat tails.
+          type: integer
+          minimum: 0
+        deltaNorm:
+          description: |
+            The d value as of the head of the last flat-tail.
+            This can be used to fine-tune epsilon
+            even when not using flat-tail algorithm.
+          type: number
+          format: double
+          minimum: 0
+        ranking:
+          description: |
+            The sorted ranking of peer indices.
+            Peers not found here have zero global trust.
+          type: array
+          items:
+            type: integer
+            minimum: 0
   requestBodies:
     ComputeRequestBody:
       description: |
@@ -512,54 +559,7 @@ components:
               eigenTrust:
                 $ref: "#/components/schemas/TrustVectorRef"
               flatTailStats:
-                description: Flat-tail algorithm stats and peer ranking.
-                type: object
-                required:
-                  - length
-                  - threshold
-                  - deltaNorm
-                  - ranking
-                properties:
-                  length:
-                    description: |
-                      The flat-tail length (say, L, then
-                      the last L+1 iterations had the same ranking).
-                      This is the number of iterations that could be saved
-                      by using flat-tail algorithm
-                      (passing flatTail equal to the threshold stat below)
-                      while achieving the same result.
-                    type: integer
-                    minimum: 0
-                  threshold:
-                    description: |
-                      The suggested minimum threshold parameter (flatTail).
-                      It is determined from false flat tails observed.
-                      Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-                      (each letter is a distinct ranking) before epsilon was reached,
-                      both DD and EEEE are false flat tails
-                      of length 1 and 3 respectively.
-                      In this case, Threshold=4 is suggested in order to ignore
-                      these false flat tails.
-                    type: integer
-                    minimum: 0
-                  deltaNorm:
-                    description: |
-                      The d value as of the head of the last flat-tail.
-                      This can be used to fine-tune epsilon
-                      even when not using flat-tail algorithm.
-                    type: number
-                    format: double
-                    minimum: 0
-                  ranking:
-                    description: |
-                      The sorted ranking of peer indices.
-                      Peers not found here have zero global trust.
-                    type: array
-                    items:
-                      type: integer
-                      minimum: 0
-
-
+                $ref: "#/components/schemas/FlatTailStats"
     InvalidRequest:
       description: |
         Client sent an invalid request.

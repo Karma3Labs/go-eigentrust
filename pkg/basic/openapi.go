@@ -31,6 +31,36 @@ const (
 	InlineTrustVectorSchemeInline InlineTrustVectorScheme = "inline"
 )
 
+// FlatTailStats Flat-tail algorithm stats and peer ranking.
+type FlatTailStats struct {
+	// DeltaNorm The d value as of the head of the last flat-tail.
+	// This can be used to fine-tune epsilon
+	// even when not using flat-tail algorithm.
+	DeltaNorm float64 `json:"deltaNorm"`
+
+	// Length The flat-tail length (say, L, then
+	// the last L+1 iterations had the same ranking).
+	// This is the number of iterations that could be saved
+	// by using flat-tail algorithm
+	// (passing flatTail equal to the threshold stat below)
+	// while achieving the same result.
+	Length int `json:"length"`
+
+	// Ranking The sorted ranking of peer indices.
+	// Peers not found here have zero global trust.
+	Ranking []int `json:"ranking"`
+
+	// Threshold The suggested minimum threshold parameter (flatTail).
+	// It is determined from false flat tails observed.
+	// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
+	// (each letter is a distinct ranking) before epsilon was reached,
+	// both DD and EEEE are false flat tails
+	// of length 1 and 3 respectively.
+	// In this case, Threshold=4 is suggested in order to ignore
+	// these false flat tails.
+	Threshold int `json:"threshold"`
+}
+
 // InlineLocalTrust Refers to a local trust matrix "inline".
 //
 // Instead of pointing (referencing) to an externally stored local trust,
@@ -130,34 +160,7 @@ type ComputeWithStatsResponseOK struct {
 	EigenTrust TrustVectorRef `json:"eigenTrust"`
 
 	// FlatTailStats Flat-tail algorithm stats and peer ranking.
-	FlatTailStats struct {
-		// DeltaNorm The d value as of the head of the last flat-tail.
-		// This can be used to fine-tune epsilon
-		// even when not using flat-tail algorithm.
-		DeltaNorm float64 `json:"deltaNorm"`
-
-		// Length The flat-tail length (say, L, then
-		// the last L+1 iterations had the same ranking).
-		// This is the number of iterations that could be saved
-		// by using flat-tail algorithm
-		// (passing flatTail equal to the threshold stat below)
-		// while achieving the same result.
-		Length int `json:"length"`
-
-		// Ranking The sorted ranking of peer indices.
-		// Peers not found here have zero global trust.
-		Ranking []int `json:"ranking"`
-
-		// Threshold The suggested minimum threshold parameter (flatTail).
-		// It is determined from false flat tails observed.
-		// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-		// (each letter is a distinct ranking) before epsilon was reached,
-		// both DD and EEEE are false flat tails
-		// of length 1 and 3 respectively.
-		// In this case, Threshold=4 is suggested in order to ignore
-		// these false flat tails.
-		Threshold int `json:"threshold"`
-	} `json:"flatTailStats"`
+	FlatTailStats FlatTailStats `json:"flatTailStats"`
 }
 
 // InvalidRequest defines model for InvalidRequest.
@@ -617,34 +620,7 @@ type ComputeWithStatsResponse struct {
 		EigenTrust TrustVectorRef `json:"eigenTrust"`
 
 		// FlatTailStats Flat-tail algorithm stats and peer ranking.
-		FlatTailStats struct {
-			// DeltaNorm The d value as of the head of the last flat-tail.
-			// This can be used to fine-tune epsilon
-			// even when not using flat-tail algorithm.
-			DeltaNorm float64 `json:"deltaNorm"`
-
-			// Length The flat-tail length (say, L, then
-			// the last L+1 iterations had the same ranking).
-			// This is the number of iterations that could be saved
-			// by using flat-tail algorithm
-			// (passing flatTail equal to the threshold stat below)
-			// while achieving the same result.
-			Length int `json:"length"`
-
-			// Ranking The sorted ranking of peer indices.
-			// Peers not found here have zero global trust.
-			Ranking []int `json:"ranking"`
-
-			// Threshold The suggested minimum threshold parameter (flatTail).
-			// It is determined from false flat tails observed.
-			// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-			// (each letter is a distinct ranking) before epsilon was reached,
-			// both DD and EEEE are false flat tails
-			// of length 1 and 3 respectively.
-			// In this case, Threshold=4 is suggested in order to ignore
-			// these false flat tails.
-			Threshold int `json:"threshold"`
-		} `json:"flatTailStats"`
+		FlatTailStats FlatTailStats `json:"flatTailStats"`
 	}
 	JSON400 *struct {
 		// Message Describes the error in a human-readable message.
@@ -762,34 +738,7 @@ func ParseComputeWithStatsResponse(rsp *http.Response) (*ComputeWithStatsRespons
 			EigenTrust TrustVectorRef `json:"eigenTrust"`
 
 			// FlatTailStats Flat-tail algorithm stats and peer ranking.
-			FlatTailStats struct {
-				// DeltaNorm The d value as of the head of the last flat-tail.
-				// This can be used to fine-tune epsilon
-				// even when not using flat-tail algorithm.
-				DeltaNorm float64 `json:"deltaNorm"`
-
-				// Length The flat-tail length (say, L, then
-				// the last L+1 iterations had the same ranking).
-				// This is the number of iterations that could be saved
-				// by using flat-tail algorithm
-				// (passing flatTail equal to the threshold stat below)
-				// while achieving the same result.
-				Length int `json:"length"`
-
-				// Ranking The sorted ranking of peer indices.
-				// Peers not found here have zero global trust.
-				Ranking []int `json:"ranking"`
-
-				// Threshold The suggested minimum threshold parameter (flatTail).
-				// It is determined from false flat tails observed.
-				// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-				// (each letter is a distinct ranking) before epsilon was reached,
-				// both DD and EEEE are false flat tails
-				// of length 1 and 3 respectively.
-				// In this case, Threshold=4 is suggested in order to ignore
-				// these false flat tails.
-				Threshold int `json:"threshold"`
-			} `json:"flatTailStats"`
+			FlatTailStats FlatTailStats `json:"flatTailStats"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -884,34 +833,7 @@ type ComputeWithStatsResponseOKJSONResponse struct {
 	EigenTrust TrustVectorRef `json:"eigenTrust"`
 
 	// FlatTailStats Flat-tail algorithm stats and peer ranking.
-	FlatTailStats struct {
-		// DeltaNorm The d value as of the head of the last flat-tail.
-		// This can be used to fine-tune epsilon
-		// even when not using flat-tail algorithm.
-		DeltaNorm float64 `json:"deltaNorm"`
-
-		// Length The flat-tail length (say, L, then
-		// the last L+1 iterations had the same ranking).
-		// This is the number of iterations that could be saved
-		// by using flat-tail algorithm
-		// (passing flatTail equal to the threshold stat below)
-		// while achieving the same result.
-		Length int `json:"length"`
-
-		// Ranking The sorted ranking of peer indices.
-		// Peers not found here have zero global trust.
-		Ranking []int `json:"ranking"`
-
-		// Threshold The suggested minimum threshold parameter (flatTail).
-		// It is determined from false flat tails observed.
-		// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-		// (each letter is a distinct ranking) before epsilon was reached,
-		// both DD and EEEE are false flat tails
-		// of length 1 and 3 respectively.
-		// In this case, Threshold=4 is suggested in order to ignore
-		// these false flat tails.
-		Threshold int `json:"threshold"`
-	} `json:"flatTailStats"`
+	FlatTailStats FlatTailStats `json:"flatTailStats"`
 }
 
 type InvalidRequestJSONResponse struct {
@@ -1059,66 +981,67 @@ func (sh *strictHandler) ComputeWithStats(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"H4sIAAAAAAAC/9xaX2/cRpL/Kg3qDivdUaPhyLKkMfbBiR3AWN+ukRh7D2EA9ZDFmbbJaqa7OZISCPB3",
+	"2Ne71/tg/iSHqm7+mRlqJCX2XbB+MdXTf6qrfvW/f40yXdUaAZ2N5r9GBn5uwLpvdK6AB77VVd04+L4b",
+	"v6XRTKMDdPQp67pUmXRK48kHq5HG4EZWdek3+A9lrcLlW53J8r1pLC/KwWZG1bQomkdvULiVsiIsi0VJ",
+	"k4Wj2WJxKw5mQllR+Y1OGvyI+honKb4DI16rJSDvK2S51Ea5VRWnqBwtkdY2FeTCabEA4VYgrKxASMvf",
+	"tYFjPmOS4vuVpBVxOGuw0FNxMBUSc3GQxCnyiMKlOEhEoRsjnKqA1oiqyVb0/8F0kmIUR7apKmluo3n0",
+	"Upwe1wCmvaO4Vm7VXmn7vlLQ1CiO1rJsgJlc1isZzaeTJI7KDU4COsOi+vHXSEXzaRx9iOZJHK2jeXIX",
+	"D8ZmPHYaxpLBWHL3UxzZbAUVRPNIYakQiHj1C/CCqDaw57zBSf7cZ/v3u7uLd0HxEvN3g1MewAdqJz6w",
+	"WGZ/spvcawgHVpOAU+wkPMDPftxI0aAqtKnExtrGQi5UIVBvjtsaMlUoyAkWLYRIeISBz5/+cTAT0gyQ",
+	"BrmAnxtZlreMOUChULjGYMyIvAcPB7MUH49mQv8EJvchGdZgbjXCgJDfiFRSiO7UPwpaCV0/KCI82QXS",
+	"+wGKRC2tJbXduJMuxGkQ4GGQ4FEsrldgYJ5iisdkCXiq9caABzziwuhMfP70D+GuVQYbNiHMTvqJMbGQ",
+	"B2fd4DQWLD0DmaqNzqQDGv2TFa2pSrEzRtvgehGEjpomHiT0PcTewFpV2hCGJHpjleK7DtfWGcClW4nD",
+	"K5bk1RHtM50kPO+NA8PWXriVAbvSZS4Or6C2qtTop8qFBXQvSCUAPVDBrMGQGhHDcyhkUzrBgElxIUm7",
+	"mlr7udhUCzAkiSCH06NtjHoBbwH1dyNwOpmdjYBwOjk/G8WhH5vx2PQLWdLpZLZhS6eTi8fiffYA3pUd",
+	"sxlrpZuBZYWbDGoXoP53YqdlkNlMlpCLXBUFGEBX3r6gGWNgYCFsQ2Kp1oACbihWUI6tzsDpEi0eeyWs",
+	"obRk9DpaWcaHB1M2lXShTFo4SjHX7AdWcg3BJBLUA6HaiEyiRpXJUv0CebtjVioPTY0ljygjDJTSqTWI",
+	"Si5RuSanL+fA2EAldIQLtXvhFLu7/jmB42R6FdPx08m0/Zccsf1mS1AoBOMVj2+ofoFjrwBBK2i7BI6f",
+	"ixNxurHT6edP/3MUp2i1UE5cq7IUTn4Er8kdXbbfe0e6KZJ75JUGLGmgQr9cZlljpANhJH5UuIxTBPZt",
+	"5CGErDSb/mswxzQB8qCaCNJ44UlVeuuw6apJi5nTrVF1K90sV3GKWywjjORQKFQO6EQUeg3moyrLuZdA",
+	"J6RAYSBq09fy1QgU2UriElKUhSNTQhRIUcD1gE9M7iuCm65pD0I5YKYbI5feX8JNDUZVgC5FsreuQRAd",
+	"rNmjMn4QILfEsclyQkFCCy3hdM2HZiXx6VohtgfREg4apMi0NJYQXkqzBHM0OIGvU6qPxBHbFIXK4FGW",
+	"0LvswwYRMrBWGlXeHjHyRNj7PlvZ/jxnqXwV7/01rOYT48+78LOkDWtD8nch3QnMIEPK2kh8OYsjigil",
+	"i+ZRrpsFu5pK3qiqqfjMSqH/nsaRu63pVO/EorsBS3/9PbsUpXTvpSrHbDyI0vtrXTDsaC5rZIqHrbY0",
+	"6FUiF4XRVW8aOn04CgFsxTEneWxAsYCCwwQwlULJOY9jXcwaY5WmHGwqKpBIXr07ltHNahj2iYP+DJey",
+	"Owr7Qi6sLgnlg1Ag8M0DfoQ3Ch0sPXM2UfovBopoHh2c9JntiRe3PekTju+hoKXYVG9B5mDsOGf7YMTp",
+	"+rjlZrBlWmQarcrBpFhobwnrxtTasuEjhhwzQ7oMYyJEy7A2Dn/MBYcKsO96POnvkDlt+H53MSf0ykAe",
+	"zX8c8umn7hi9+ACZi1grNu//ThpZAflBQbcjU8W1ABGKBJ7y/gBnGvBH2lqj3agf/Kdyqx+cdPb78OPf",
+	"/vKIOsJ9Wgpd8vZUjvSaxNQ8tPy7jcnb/ByQsb3vY/j7Q5OReS4a8rGBt15LBsmpzbSBPhBpeSsWOqdF",
+	"6KRCH8x1O/glFONdQ1nS/2tpSNtTtE46ZZ3KLGcQAc9WHFYSb72PDblisCNb+OVI/C6O3uBalioPVaEn",
+	"VoRe+++R/OylqFvMCT7Ah1pgjDYebZ3XqsixLYnBmUSyNaWW+TCVm4tQKNrI7wwUggWz1wt0m28T+Ir/",
+	"WoDnONNFMZQUq6aSeGxA5nJRgggbhIRJVPKWbCFUtQv5dgCHdUbhcgdY7fmPQdG3HNEKyrgobFJeMkMd",
+	"7W/Kl/tuWwE29/tuV+qCYOMRw2FGgM0kirf4lkPp5F+1qcaNaZsbSNu6qhXIvP0upXU95rg+wsE+uSFf",
+	"gHGag5hjDsSCf0gRKLO4pkyTYNBwmWLM9DLfR1zwPrfrHev4bfozgvs9tPI2Fm85nUFOfv2d3v57MozP",
+	"VzLvk5vAyqP2uiFJ693OZmDvRKabMmfHKteQp7i4vf/KKR7W0na/ktB91afV8D5pIwmLBZT6+ijF65Uq",
+	"KSdYKVi3Pt9Ty1nDYzxWuNc456w2ZGZabxoyfaEwVxnbunc+u9BOFLrBXKzAgE/0fgGjxbLUi1ajPTHK",
+	"QeU1dy9VYUQaI2/57/b+99DZLJfAhZOw7YBhvaE6bHlLQnzjfCbjQ5s23CpkaQdxmRV6wRWRfJJisIZz",
+	"8aYQsuNJzQkoipfffPvq1evXr19/1/0T17LfIMVDkNlKlEDzufgicrLwmLkOXG0cF1SGNzC0jFOQhXYr",
+	"8eoVqzedxAnKNsUp6qLFecJTT9kXQUZJGefzbwbpeSzet5z68zMulHasVCi0ySkH1kItURtgVbG7Zz6M",
+	"s+34xmvrUK7xwCb1qNy1q+TSKE/Y16b4HooQ9m3WDCvpjLoRaUg10ihkwtYF61ZrhRw8Hxrg8knGUqGN",
+	"UMANCZrzbOu0gQ0n5jsZmTSU8wQvz362s6C7hKRI6Z/CEG/7A0H4mwrlLJSFZ23vlH98cnKXjCV30+kD",
+	"qdzwmD0zz2ibrZCvXbctlW+HMRBqPGYTEaaLwIZdLvmIiuui5sTXR0HUUpmuUeCtDikD2dAlKTNvnStD",
+	"jNyotaPu4ovSW+uVqrdM0744cxt8r9GZ2zGL1XJsN3Iq1A3FfhxQiKsejFyoyAG1Ax8f0HCPi4AEJA37",
+	"sZXDTzsBSiuZ3YCINrajhdtd3rfsUs4K+3NDvM1VBRhyyaG2Jw9qe2BFoCzuEPIY5fb8HdHw2oBl9SLN",
+	"pEkPIKi/v3RCY1utvFJXR6IuZebr3QPEcLiI2q3AtHM/XB2xH5dtOykTstINOnF4tb46GtHVncL12X2N",
+	"kk0lUvsF2DU2ibA2dmWXQsAPZUqFOdyEjL4tFpRg7WZNUxx2gj1i38HxMmal3mkjddx8MKj48AjyQ23y",
+	"D0j9ei/e6ITDWltF/vSoBQAdTcekyGDiMjaj5kpdEZL894er3xDcbmmTioi/ROX9+jNIpvd7R8+aNc/8",
+	"cn5xuOvDjnE4+4u5xA1le1z3/P/L5Q3v7xt8bJQfcG5buHuyCxtA5J/Jh21AT3Q+zAec/weea4etX9p1",
+	"tTqrrAiWhssavTf7TR5qs+AflOepXun3mfPN0nhvw7fU46ta7wFLW+P9ZQz2uLHeLHLvkG3G0xhPkUb4",
+	"W8ESfEq4Gt2N0bFVe320x3g6JUPHdDdeNFNYaC4pd62z95uF1m+kVZl4+e6N4JZa1cnV/zD2XmhCqaZy",
+	"JZ01thNJCLjbEc2j6SSZTIktugaUtYrm0SkPxVEt3Yo14STUcLkiqcdy0FBO360QhyoQEex77QrrxvnC",
+	"8cvtyj03jq1/DuLnccdfiH8Tb3eMRUy4tbU0lJxrU/l5/XORzirundU+Kom5U6S5mXTMAUBrcxfgrgFQ",
+	"+Mctid/gNZdYu3z+Cat9vXwkT1dWtHr0QsiyFByM+76sZj7LMkCwDrW3N3nP+tDyGDyGHMPnxjvKk5FH",
+	"lNt9ktl0+sQy+v5XTqGQ2PULQsXv86f/Gm0Zf/7034OSsQ8WwmMiWuZ7176vvFLLFWPIS1+WDcSCzCqU",
+	"tykWuiz19SBSPZi+EP4lkjfHsl3K1a+nPeu5JyB7Nj09nV2eJqfnl89m5+fbL2iS8+n5s8vk9Gx6fn52",
+	"en6+5ZGezc4uZ8nZWZLMLpKLs7MHuscPPbd5IuN9aLq3WT+QjZALvfZthb9SMMS+exCg9A92+FmHNt4b",
+	"qhzQKdYE7QvTuy9/mIzed/Kjk+Rfuxc/GcQp5lBptM70rWB+J7BRWBw83fgKjxX2I+D55UUynT17fvp8",
+	"HALTi+Ty4tnlxez5OAZmyeVlMjt7/vCTq75z9KR+7FfoAfbufGtV50wZliEZC+2UUIFXKIgcwJzr8FyW",
+	"1UX3gmtNYZ/V/FpMC72gpKPz1W0TyDcEn3nzNW4Kg5k72eoaMh87cNzr2Xhe6xmPCS3Htm1dfUEn+QOA",
+	"aE/hfncObRWamM6Penpl8GouXf8UeVRm3Xvk+1uvpKwGXGOwNYijbqdroH9d/7NfgHua+V8XA8E8wQ1k",
+	"DbeEe26GTi4/MPV2YbeRQ1FdeIK60lwjWtyKv0hTyVPxVi5Cp6ExZTSPVs7Vdn5yIms1+XhaTpQ+WVBA",
+	"d7JOTiIyGyN9IiiL47CxDzj8YbEwDdJRV/xSIARC9NPV9onzkxNeSbvML6YX0+7Q6O6nu/8NAAD//46v",
+	"uHOmMQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -36,35 +36,6 @@ func Canonicalize(entries []sparse.Entry) error {
 	return nil
 }
 
-// Flat-tail algorithm stats.
-type FlatTailStats struct {
-	// Length denotes the flat-tail length,
-	// i.e. the last Length+1 iterations had the same ranking.
-	// This is the number of iterations that could be saved
-	// by using flat-tail algorithm (passing flatTail=Threshold)
-	// while achieving the same result.
-	Length int
-
-	// Threshold is the suggested minimum threshold parameter (flatTail).
-	// It is determined from false flat tails observed.
-	// Example: If a ranking pattern ABCDDEEEEFFFFFFFFFF was observed
-	// (each letter is a distinct ranking) before epsilon was reached,
-	// both DD and EEEE are false flat tails of length 1 and 3 respectively.
-	// In this case, Threshold=4 is suggested in order to ignore
-	// these false flat tails.
-	Threshold int
-
-	// DeltaNorm is the d value as of the head of the last flat-tail.
-	// This can be used to fine-tune epsilon even when not using flat-tail
-	// algorithm.
-	DeltaNorm float64
-
-	// Ranking is the sorted ranking of peer indices.
-	// Contains up to numLeaders entries;
-	// peers not found here have zero global trust.
-	Ranking []int
-}
-
 // Compute computes EigenTrust scores.
 //
 // Local trust (c) and pre-trust (p) must have already been canonicalized.
