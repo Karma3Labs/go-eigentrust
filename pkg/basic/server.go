@@ -25,7 +25,8 @@ func (e Error400) Error() string {
 }
 
 func (server *StrictServerImpl) compute(
-	ctx context.Context, localTrustRef *LocalTrustRef, preTrust *TrustVectorRef,
+	ctx context.Context, localTrustRef *LocalTrustRef,
+	initialTrust *TrustVectorRef, preTrust *TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
 ) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
@@ -33,8 +34,9 @@ func (server *StrictServerImpl) compute(
 		Str("func", "(*StrictServerImpl).Compute").
 		Logger()
 	var (
-		c *sparse.Matrix
-		p *sparse.Vector
+		c  *sparse.Matrix
+		p  *sparse.Vector
+		t0 *sparse.Vector
 	)
 	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
 		err = Error400{errors.Wrap(err, "cannot load local trust")}
@@ -68,6 +70,26 @@ func (server *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
+	if initialTrust == nil {
+		t0 = nil
+	} else if t0, err = loadTrustVector(initialTrust); err != nil {
+		err = Error400{errors.Wrap(err, "cannot load initial trust")}
+		return
+	} else {
+		// align dimensions
+		switch {
+		case t0.Dim < cDim:
+			t0.SetDim(cDim)
+		case cDim < t0.Dim:
+			cDim = t0.Dim
+			c.SetDim(t0.Dim, t0.Dim)
+			p.SetDim(t0.Dim)
+		}
+		logger.Trace().
+			Int("dim", t0.Dim).
+			Int("nnz", t0.NNZ()).
+			Msg("initial trust loaded")
+	}
 	if alpha == nil {
 		a := 0.5
 		alpha = &a
@@ -93,12 +115,15 @@ func (server *StrictServerImpl) compute(
 		numLeaders = &nl
 	}
 	CanonicalizeTrustVector(p)
+	if t0 != nil {
+		CanonicalizeTrustVector(t0)
+	}
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = Error400{errors.Wrapf(err, "cannot canonicalize local trust")}
 		return
 	}
-	t, err := Compute(ctx, c, p, *alpha, *epsilon, nil, nil,
+	t, err := Compute(ctx, c, p, *alpha, *epsilon, t0, nil,
 		*flatTail, *numLeaders, &flatTailStats)
 	c = nil
 	p = nil
@@ -126,7 +151,8 @@ func (server *StrictServerImpl) Compute(
 ) (ComputeResponseObject, error) {
 	ctx = util.SetLoggerInContext(ctx, server.Logger)
 	tv, _, err := server.compute(ctx,
-		&request.Body.LocalTrust, request.Body.PreTrust,
+		&request.Body.LocalTrust,
+		request.Body.InitialTrust, request.Body.PreTrust,
 		request.Body.Alpha, request.Body.Epsilon,
 		request.Body.FlatTail, request.Body.NumLeaders)
 	if err != nil {
@@ -145,7 +171,8 @@ func (server *StrictServerImpl) ComputeWithStats(
 ) (ComputeWithStatsResponseObject, error) {
 	ctx = util.SetLoggerInContext(ctx, server.Logger)
 	tv, flatTailStats, err := server.compute(ctx,
-		&request.Body.LocalTrust, request.Body.PreTrust,
+		&request.Body.LocalTrust,
+		request.Body.InitialTrust, request.Body.PreTrust,
 		request.Body.Alpha, request.Body.Epsilon,
 		request.Body.FlatTail, request.Body.NumLeaders)
 	if err != nil {
