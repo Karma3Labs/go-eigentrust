@@ -68,13 +68,6 @@ func (server *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
-	if cDim != p.Dim {
-		err = Error400{
-			errors.Errorf("local trust size %d != pre-trust size %d",
-				cDim, p.Dim),
-		}
-		return
-	}
 	if alpha == nil {
 		a := 0.5
 		alpha = &a
