@@ -40,36 +40,30 @@ func Canonicalize(entries []sparse.Entry) error {
 //
 // Local trust (c) and pre-trust (p) must have already been canonicalized.
 //
-// Compute uses p as the starting point for iterations,
-// except if t0 (initial trust vector) is not nil,
-// Compute uses t0 instead of p.
-//
 // Alpha (a) and epsilon (e) are the pre-trust bias and iteration threshold,
 // as defined in the EigenTrust paper.
 //
-// Compute terminates EigenTrust iterations when two conditions are (both) met:
+// Compute accepts options (opts) which modifies its behavior.
+// See their documentation for details.
 //
-//   - Convergence stability: The Frobenius norm of trust vector delta
-//     falls below epsilon threshold.
-//   - Ranking stability: The overall sorted ranking of top numLeaders peers
-//     remains unchanged for flatTail+1 iterations.
-//     numLeaders=0 means all peers are significant, i.e. numLeaders=c.Dim()
-//
-// To disable either of these checks in order to use the other criterion only,
-// pass e=1 or flatTail=0.
-//
-// Compute stores the result (EigenTrust scores) in t and returns it.
-// If t is nil, Compute allocates one first and returns it.
-//
-// If a flatTailStats struct is passed,
-// Compute populates it with flat-tail algorithm stats upon completion.
-// See the flat-tail algorithm description for details.
+// Compute terminates EigenTrust iterations when the trust vector converges,
+// i.e. the Frobenius norm of trust vector delta falls below epsilon threshold.
+// Also see WithFlatTail for an additional/alternative termination criterion
+// based upon ranking stability.
 func Compute(
 	ctx context.Context, c *sparse.Matrix, p *sparse.Vector,
 	a float64, e float64,
-	t0 *sparse.Vector, t *sparse.Vector,
-	flatTail int, numLeaders int, flatTailStats *FlatTailStats,
+	opts ...ComputeOpt,
 ) (*sparse.Vector, error) {
+	o := ComputeOpts{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	t0 := o.t0
+	t := o.t
+	flatTail := o.flatTailLength
+	numLeaders := o.numLeaders
+	flatTailStats := o.flatTailStats
 	logger, hasLogger := util.LoggerInContext(ctx)
 	if hasLogger {
 		logger.Trace().Msg("started")
