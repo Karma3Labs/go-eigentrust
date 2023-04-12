@@ -114,6 +114,9 @@ func Compute(
 	flatTailStats.Ranking = nil
 	iter := 0
 	for ; d > e || (flatTailStats.Length < flatTail); iter++ {
+		if o.maxIterations > 0 && iter >= o.maxIterations {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
