@@ -269,6 +269,18 @@ func (server *StrictServerImpl) getLocalTrust(
 	}, nil
 }
 
+func (server *StrictServerImpl) HeadLocalTrust(
+	ctx context.Context, request HeadLocalTrustRequestObject,
+) (HeadLocalTrustResponseObject, error) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	if server.storedLocalTrust[request.Id] == nil {
+		return HeadLocalTrust404Response{}, nil
+	} else {
+		return HeadLocalTrust204Response{}, nil
+	}
+}
+
 func (server *StrictServerImpl) UpdateLocalTrust(
 	ctx context.Context, request UpdateLocalTrustRequestObject,
 ) (UpdateLocalTrustResponseObject, error) {

@@ -164,6 +164,18 @@ paths:
                 $ref: "#/components/schemas/InlineLocalTrust"
         "404":
           description: The local trust does not exist.
+    head:
+      summary: Check for existence of local trust
+      description: |
+        Return 204 if the given local trust exists, 404 otherwise.
+      operationId: headLocalTrust
+      parameters:
+        - $ref: "#/components/parameters/LocalTrustIdParam"
+      responses:
+        "204":
+          description: The local trust exists.
+        "404":
+          description: The local trust does not exist.
 components:
   parameters:
     LocalTrustIdParam:
