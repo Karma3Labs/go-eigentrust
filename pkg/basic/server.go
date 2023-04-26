@@ -4,8 +4,11 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"runtime"
+	"sync"
 
+	"github.com/mohae/deepcopy"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
@@ -13,15 +16,29 @@ import (
 )
 
 type StrictServerImpl struct {
-	Logger zerolog.Logger
+	logger              zerolog.Logger
+	storedLocalTrust    map[LocalTrustId]*sparse.Matrix
+	storedLocalTrustMtx sync.Mutex
 }
 
-type Error400 struct {
+func NewStrictServerImpl(logger zerolog.Logger) *StrictServerImpl {
+	return &StrictServerImpl{
+		logger:           logger,
+		storedLocalTrust: make(map[LocalTrustId]*sparse.Matrix),
+	}
+}
+
+type HTTPError struct {
+	Code  int
 	Inner error
 }
 
-func (e Error400) Error() string {
-	return fmt.Sprintf("400 Bad Request: %s", e.Inner.Error())
+func (e HTTPError) Error() string {
+	statusText := http.StatusText(e.Code)
+	if statusText != "" {
+		statusText = " " + statusText
+	}
+	return fmt.Sprintf("HTTP %d%s: %s", e.Code, statusText, e.Inner.Error())
 }
 
 func (server *StrictServerImpl) compute(
@@ -31,7 +48,7 @@ func (server *StrictServerImpl) compute(
 	flatTail *int, numLeaders *int,
 	maxIterations *int,
 ) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
-	logger := server.Logger.With().
+	logger := server.logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
 		Logger()
 	var (
@@ -41,7 +58,7 @@ func (server *StrictServerImpl) compute(
 	)
 	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
 	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
-		err = Error400{errors.Wrap(err, "cannot load local trust")}
+		err = HTTPError{400, errors.Wrap(err, "cannot load local trust")}
 		return
 	}
 	cDim, err := c.Dim()
@@ -56,7 +73,7 @@ func (server *StrictServerImpl) compute(
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
 	} else if p, err = loadTrustVector(preTrust); err != nil {
-		err = Error400{errors.Wrap(err, "cannot load pre-trust")}
+		err = HTTPError{400, errors.Wrap(err, "cannot load pre-trust")}
 		return
 	} else {
 		// align dimensions
@@ -75,7 +92,7 @@ func (server *StrictServerImpl) compute(
 	if initialTrust == nil {
 		t0 = nil
 	} else if t0, err = loadTrustVector(initialTrust); err != nil {
-		err = Error400{errors.Wrap(err, "cannot load initial trust")}
+		err = HTTPError{400, errors.Wrap(err, "cannot load initial trust")}
 		return
 	} else {
 		// align dimensions
@@ -97,15 +114,17 @@ func (server *StrictServerImpl) compute(
 		a := 0.5
 		alpha = &a
 	} else if *alpha < 0 || *alpha > 1 {
-		err = Error400{errors.Errorf("alpha=%f out of range [0..1]", *alpha)}
+		err = HTTPError{
+			400, errors.Errorf("alpha=%f out of range [0..1]", *alpha),
+		}
 		return
 	}
 	if epsilon == nil {
 		e := 1e-6 / float64(cDim)
 		epsilon = &e
 	} else if *epsilon <= 0 || *epsilon > 1 {
-		err = Error400{
-			errors.Errorf("epsilon=%f out of range (0..1]", *epsilon),
+		err = HTTPError{
+			400, errors.Errorf("epsilon=%f out of range (0..1]", *epsilon),
 		}
 		return
 	}
@@ -124,7 +143,9 @@ func (server *StrictServerImpl) compute(
 	}
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
-		err = Error400{errors.Wrapf(err, "cannot canonicalize local trust")}
+		err = HTTPError{
+			400, errors.Wrapf(err, "cannot canonicalize local trust"),
+		}
 		return
 	}
 	t, err := Compute(ctx, c, p, *alpha, *epsilon, opts...)
@@ -152,7 +173,7 @@ func (server *StrictServerImpl) compute(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
-	ctx = util.SetLoggerInContext(ctx, server.Logger)
+	ctx = util.SetLoggerInContext(ctx, server.logger)
 	tv, _, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
@@ -160,10 +181,13 @@ func (server *StrictServerImpl) Compute(
 		request.Body.FlatTail, request.Body.NumLeaders,
 		request.Body.MaxIterations)
 	if err != nil {
-		if error400, ok := err.(Error400); ok {
-			var resp Compute400JSONResponse
-			resp.Message = error400.Inner.Error()
-			return resp, nil
+		if httpError, ok := err.(HTTPError); ok {
+			switch httpError.Code {
+			case 400:
+				var resp Compute400JSONResponse
+				resp.Message = httpError.Inner.Error()
+				return resp, nil
+			}
 		}
 		return nil, err
 	}
@@ -173,7 +197,7 @@ func (server *StrictServerImpl) Compute(
 func (server *StrictServerImpl) ComputeWithStats(
 	ctx context.Context, request ComputeWithStatsRequestObject,
 ) (ComputeWithStatsResponseObject, error) {
-	ctx = util.SetLoggerInContext(ctx, server.Logger)
+	ctx = util.SetLoggerInContext(ctx, server.logger)
 	tv, flatTailStats, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
@@ -181,10 +205,13 @@ func (server *StrictServerImpl) ComputeWithStats(
 		request.Body.FlatTail, request.Body.NumLeaders,
 		request.Body.MaxIterations)
 	if err != nil {
-		if error400, ok := err.(Error400); ok {
-			var resp ComputeWithStats400JSONResponse
-			resp.Message = error400.Inner.Error()
-			return resp, nil
+		if httpError, ok := err.(HTTPError); ok {
+			switch httpError.Code {
+			case 400:
+				var resp ComputeWithStats400JSONResponse
+				resp.Message = httpError.Inner.Error()
+				return resp, nil
+			}
 		}
 		return nil, err
 	}
@@ -197,13 +224,107 @@ func (server *StrictServerImpl) ComputeWithStats(
 	return resp, nil
 }
 
+func (server *StrictServerImpl) GetLocalTrust(
+	ctx context.Context, request GetLocalTrustRequestObject,
+) (GetLocalTrustResponseObject, error) {
+	inline, err := server.getLocalTrust(ctx, request.Id)
+	if err != nil {
+		if httpError, ok := err.(HTTPError); ok {
+			switch httpError.Code {
+			case 404:
+				return GetLocalTrust404Response{}, nil
+			}
+		}
+		return nil, err
+	}
+	return GetLocalTrust200JSONResponse(*inline), nil
+}
+
+func (server *StrictServerImpl) getLocalTrust(
+	_ context.Context, id LocalTrustId,
+) (*InlineLocalTrust, error) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	c := server.storedLocalTrust[id]
+	if c == nil {
+		return nil, HTTPError{Code: 404}
+	}
+	cDim, err := c.Dim()
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot get dimension")
+	}
+	entries := make([]InlineLocalTrustEntry, 0, c.NNZ())
+	for i, row := range c.Entries {
+		for _, entry := range row {
+			entries = append(entries, InlineLocalTrustEntry{
+				I: i,
+				J: entry.Index,
+				V: entry.Value,
+			})
+		}
+	}
+	return &InlineLocalTrust{
+		Entries: entries,
+		Size:    cDim,
+	}, nil
+}
+
+func (server *StrictServerImpl) UpdateLocalTrust(
+	ctx context.Context, request UpdateLocalTrustRequestObject,
+) (UpdateLocalTrustResponseObject, error) {
+	logger := server.logger.With().
+		Str("func", "(*StrictServerImpl).UpdateLocalTrust").
+		Str("localTrustId", request.Id).
+		Logger()
+	c, err := server.loadLocalTrust(request.Body)
+	if err != nil {
+		return nil, HTTPError{400, errors.Wrap(err, "cannot load local trust")}
+	}
+	cDim, err := c.Dim()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get dimension")
+	}
+	logger.Trace().
+		Int("dim", cDim).
+		Int("nnz", c.NNZ()).
+		Msg("local trust loaded")
+	if server.setStoredLocalTrust(request.Id, c) {
+		return UpdateLocalTrust201Response{}, nil
+	} else {
+		return UpdateLocalTrust200Response{}, nil
+	}
+}
+
+func (server *StrictServerImpl) DeleteLocalTrust(
+	ctx context.Context, request DeleteLocalTrustRequestObject,
+) (DeleteLocalTrustResponseObject, error) {
+	if !server.deleteStoredLocalTrust(request.Id) {
+		return DeleteLocalTrust404Response{}, nil
+	}
+	return DeleteLocalTrust204Response{}, nil
+}
+
 func (server *StrictServerImpl) loadLocalTrust(
 	ref *LocalTrustRef,
 ) (*sparse.Matrix, error) {
-	if inline, err := ref.AsInlineLocalTrust(); err == nil {
+	switch ref.Scheme {
+	case "inline":
+		inline, err := ref.AsInlineLocalTrust()
+		if err != nil {
+			return nil, errors.Wrapf(err,
+				"cannot parse inline local trust reference")
+		}
 		return server.loadInlineLocalTrust(&inline)
+	case "stored":
+		stored, err := ref.AsStoredLocalTrust()
+		if err != nil {
+			return nil, errors.Wrapf(err,
+				"cannot parse stored local trust reference")
+		}
+		return server.loadStoredLocalTrust(&stored)
+	default:
+		return nil, errors.New("unknown local trust ref type")
 	}
-	return nil, errors.New("unknown local trust ref type")
 }
 
 func (server *StrictServerImpl) loadInlineLocalTrust(
@@ -239,6 +360,23 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
+func (server *StrictServerImpl) loadStoredLocalTrust(
+	stored *StoredLocalTrust,
+) (*sparse.Matrix, error) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	c, ok := server.storedLocalTrust[stored.Id]
+	if !ok {
+		return nil, HTTPError{400, errors.New("local trust not found")}
+	}
+	// Returned c is modified in-place (canonicalized, size-matched)
+	// so return a disposable copy, preserving the original.
+	// This is slow: It takes ~3s to copy 16M nonzero entries.
+	// TODO(ek): Implement on-demand canonicalization and remove this.
+	c = deepcopy.Copy(c).(*sparse.Matrix)
+	return c, nil
+}
+
 func loadTrustVector(ref *TrustVectorRef) (*sparse.Vector, error) {
 	if inline, err := ref.AsInlineTrustVector(); err == nil {
 		return loadInlineTrustVector(&inline)
@@ -264,4 +402,25 @@ func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
 	inline.Size = 0
 	inline.Entries = nil
 	return sparse.NewVector(size, entries), nil
+}
+
+func (server *StrictServerImpl) setStoredLocalTrust(
+	id LocalTrustId, c *sparse.Matrix,
+) (created bool) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	_, ok := server.storedLocalTrust[id]
+	server.storedLocalTrust[id] = c
+	return !ok
+}
+func (server *StrictServerImpl) deleteStoredLocalTrust(
+	id LocalTrustId,
+) (deleted bool) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	if _, ok := server.storedLocalTrust[id]; ok {
+		delete(server.storedLocalTrust, id)
+		deleted = true
+	}
+	return
 }
