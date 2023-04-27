@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
-	"k3l.io/go-eigentrust/pkg/util"
 )
 
 // CsvReader reads from a CSV file.
@@ -64,10 +64,7 @@ func Compute(
 	flatTail := o.flatTailLength
 	numLeaders := o.numLeaders
 	flatTailStats := o.flatTailStats
-	logger, hasLogger := util.LoggerInContext(ctx)
-	if hasLogger {
-		logger.Trace().Msg("started")
-	}
+	logger := zerolog.Ctx(ctx)
 	tm0 := time.Now()
 	n, err := c.Dim()
 	if err != nil {
@@ -137,13 +134,11 @@ func Compute(
 			return nil, err
 		}
 		d = t1Old.Norm2()
-		if hasLogger {
-			logger.Trace().
-				Int("iteration", iter).
-				Float64("log10dPace", math.Log10(d/d0)).
-				Float64("log10dRemaining", math.Log10(d/e)).
-				Msg("one iteration")
-		}
+		logger.Trace().
+			Int("iteration", iter).
+			Float64("log10dPace", math.Log10(d/d0)).
+			Float64("log10dRemaining", math.Log10(d/e)).
+			Msg("one iteration")
 		d0 = d
 		entries := sparse.SortEntriesByValue(
 			append(t1.Entries[:0:0], t1.Entries...))
@@ -157,7 +152,7 @@ func Compute(
 		if reflect.DeepEqual(ranking, flatTailStats.Ranking) {
 			flatTailStats.Length++
 		} else {
-			if hasLogger && flatTailStats.Length > 0 {
+			if flatTailStats.Length > 0 {
 				logger.Trace().
 					Int("length", flatTailStats.Length).
 					Msg("false flat tail detected")
@@ -173,24 +168,22 @@ func Compute(
 	}
 	tm1 = time.Now()
 	durIter, tm0 := tm1.Sub(tm0), tm1
-	if hasLogger {
-		logger.Debug().
-			Int("dim", n).
-			Int("nnz", ct.NNZ()).
-			Float64("alpha", a).
-			Float64("epsilon", e).
-			Int("flatTail", flatTail).
-			Int("numLeaders", numLeaders).
-			Int("iterations", iter).
-			Dur("durPrep", durPrep).
-			Dur("durIter", durIter).
-			Msg("finished")
-		logger.Trace().
-			Int("length", flatTailStats.Length).
-			Int("threshold", flatTailStats.Threshold).
-			Float64("deltaNorm", flatTailStats.DeltaNorm).
-			Msg("flat tail stats")
-	}
+	logger.Debug().
+		Int("dim", n).
+		Int("nnz", ct.NNZ()).
+		Float64("alpha", a).
+		Float64("epsilon", e).
+		Int("flatTail", flatTail).
+		Int("numLeaders", numLeaders).
+		Int("iterations", iter).
+		Dur("durPrep", durPrep).
+		Dur("durIter", durIter).
+		Msg("finished")
+	logger.Trace().
+		Int("length", flatTailStats.Length).
+		Int("threshold", flatTailStats.Threshold).
+		Float64("deltaNorm", flatTailStats.DeltaNorm).
+		Msg("flat tail stats")
 	if t == nil {
 		t = t1
 	} else {

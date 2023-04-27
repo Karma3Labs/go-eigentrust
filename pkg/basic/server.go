@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
-	"k3l.io/go-eigentrust/pkg/util"
 )
 
 type StrictServerImpl struct {
@@ -173,7 +172,7 @@ func (server *StrictServerImpl) compute(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
-	ctx = util.SetLoggerInContext(ctx, server.logger)
+	ctx = server.logger.WithContext(ctx)
 	tv, _, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
@@ -197,7 +196,7 @@ func (server *StrictServerImpl) Compute(
 func (server *StrictServerImpl) ComputeWithStats(
 	ctx context.Context, request ComputeWithStatsRequestObject,
 ) (ComputeWithStatsResponseObject, error) {
-	ctx = util.SetLoggerInContext(ctx, server.logger)
+	ctx = server.logger.WithContext(ctx)
 	tv, flatTailStats, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
