@@ -299,6 +299,10 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
+	err = c.Mmap(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot swap out local trust")
+	}
 	if server.setStoredLocalTrust(request.Id, c) {
 		return UpdateLocalTrust201Response{}, nil
 	} else {
