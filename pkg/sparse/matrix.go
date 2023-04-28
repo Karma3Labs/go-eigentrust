@@ -2,7 +2,15 @@ package sparse
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"runtime"
 	"sort"
+	"syscall"
+	"unsafe"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // CSMatrix is a compressed sparse matrix.
@@ -12,6 +20,7 @@ import (
 type CSMatrix struct {
 	MajorDim, MinorDim int
 	Entries            [][]Entry
+	mapped             []byte
 }
 
 // Dim asserts the receiver is a square matrix and returns the dimension.
@@ -84,6 +93,117 @@ func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 		MinorDim: m.MajorDim,
 		Entries:  transposedEntries,
 	}, nil
+}
+
+// Mmap swaps out contents onto a temp file and mmaps it, freeing core memory.
+func (m *CSMatrix) Mmap(ctx context.Context) error {
+	logger := zerolog.Ctx(ctx).
+		With().Str("func", "sparse.(*CSMatrix).Mmap").Logger()
+	if m.mapped != nil {
+		logger.Debug().Msg("already mapped")
+		return nil
+	}
+	nnz := m.NNZ()
+	if int(uintptr(nnz)) != nnz {
+		return errors.Errorf("matrix too big (%#v entries)", nnz)
+	}
+	size := unsafe.Sizeof(Entry{}) * uintptr(nnz)
+	if uintptr(int(size)) != size || int64(size) < 0 {
+		return errors.Errorf("matrix data too big (%#v bytes)", size)
+	}
+	tmpdir := os.Getenv("TMPDIR")
+	if tmpdir == "" {
+		tmpdir = "/tmp"
+	}
+	file, err := os.CreateTemp(tmpdir, "eigentrust-server-csmatrix.")
+	if err != nil {
+		return err
+	}
+	filename := file.Name()
+	logger = logger.With().Str("filename", filename).Logger()
+	logger.Debug().Int("nnz", nnz).Msg("swapping out")
+	defer func() {
+		if file != nil {
+			logger.Trace().Msg("closing file without mapping")
+			_ = file.Close()
+		}
+	}()
+	logger.Trace().Uint64("size", uint64(size)).Msg("truncating")
+	err = file.Truncate(int64(size))
+	if err != nil {
+		return err
+	}
+	logger.Trace().Msg("mmapping")
+	mapped, err := syscall.Mmap(int(file.Fd()), 0, int(size),
+		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if mapped != nil {
+			logger.Trace().Msg("unmapping upon failure")
+			_ = syscall.Munmap(mapped)
+		}
+	}()
+	logger.Trace().Msg("closing after mapping")
+	err = file.Close()
+	if err != nil {
+		logger.Err(err).Msg("cannot close file")
+	}
+	file = nil
+	logger.Trace().Msg("removing file")
+	err = os.Remove(filename)
+	if err != nil {
+		return err
+	}
+	entries := unsafe.Slice((*Entry)(unsafe.Pointer(&mapped[0])), nnz)
+	logger.Trace().Msg("copying")
+	var start int
+	for major := range m.Entries {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		stride := len(m.Entries[major])
+		span := entries[start : start+stride]
+		copy(span, m.Entries[major])
+		start += stride
+	}
+	if start != nnz {
+		panic(fmt.Sprintf("size mismatch: start %#v != nnz %#v", start, nnz))
+	}
+	logger.Trace().Msg("finishing")
+	m.mapped = mapped
+	mapped = nil
+	runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	logger.Trace().Msg("done")
+	return nil
+}
+
+func (m *CSMatrix) Munmap() error {
+	if m.mapped != nil {
+		return nil
+	}
+	err := syscall.Munmap(m.mapped)
+	if err != nil {
+		return err
+	}
+	m.mapped = nil
+	return nil
+}
+
+func (m *CSMatrix) finalize() {
+	_ = m.Munmap()
+	logger := zerolog.New(os.Stderr).
+		With().Str("m", fmt.Sprintf("%p", m)).Logger()
+	logger.Trace().Msg("finalizing")
+	if m.mapped != nil {
+		err := syscall.Munmap(m.mapped)
+		if err != nil {
+			logger.Err(err).Msg("cannot unmap backing store")
+		}
+	}
 }
 
 // CSRMatrix is a compressed sparse row matrix.
