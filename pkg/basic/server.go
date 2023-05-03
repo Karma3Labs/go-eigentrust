@@ -38,6 +38,7 @@ func (server *StrictServerImpl) compute(
 		p  *sparse.Vector
 		t0 *sparse.Vector
 	)
+	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
 	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
 		err = Error400{errors.Wrap(err, "cannot load local trust")}
 		return
@@ -89,6 +90,7 @@ func (server *StrictServerImpl) compute(
 			Int("dim", t0.Dim).
 			Int("nnz", t0.NNZ()).
 			Msg("initial trust loaded")
+		opts = append(opts, WithInitialTrust(t0))
 	}
 	if alpha == nil {
 		a := 0.5
@@ -106,13 +108,11 @@ func (server *StrictServerImpl) compute(
 		}
 		return
 	}
-	if flatTail == nil {
-		ft := 0
-		flatTail = &ft
+	if flatTail != nil {
+		opts = append(opts, WithFlatTail(*flatTail))
 	}
-	if numLeaders == nil {
-		nl := 0
-		numLeaders = &nl
+	if numLeaders != nil {
+		opts = append(opts, WithFlatTailNumLeaders(*numLeaders))
 	}
 	CanonicalizeTrustVector(p)
 	if t0 != nil {
@@ -123,8 +123,7 @@ func (server *StrictServerImpl) compute(
 		err = Error400{errors.Wrapf(err, "cannot canonicalize local trust")}
 		return
 	}
-	t, err := Compute(ctx, c, p, *alpha, *epsilon, t0, nil,
-		*flatTail, *numLeaders, &flatTailStats)
+	t, err := Compute(ctx, c, p, *alpha, *epsilon, opts...)
 	c = nil
 	p = nil
 	runtime.GC()
