@@ -384,6 +384,13 @@ components:
                   for the purpose of flat-tail algorithm.  0 means everyone.
                 type: integer
                 minimum: 0
+              maxIterations:
+                description: |
+                  The maximum number of iterations after which to stop
+                  even if other termination criteria are not met.
+                  0 means no limit.
+                type: integer
+                minimum: 0
           examples:
             Simple1:
               summary: Simple 3-peer example

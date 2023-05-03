@@ -9,6 +9,7 @@ type ComputeOpts struct {
 	flatTailLength int
 	numLeaders     int
 	flatTailStats  *FlatTailStats
+	maxIterations  int
 }
 
 // ComputeOpt is one Compute option.
@@ -52,4 +53,11 @@ func WithFlatTailNumLeaders(n int) ComputeOpt {
 // upon completion.
 func WithFlatTailStats(stats *FlatTailStats) ComputeOpt {
 	return func(o *ComputeOpts) { o.flatTailStats = stats }
+}
+
+// WithMaxIterations tells Compute to iterate at most n times,
+// even if the other termination criteria are not met.
+// 0 means unlimited.
+func WithMaxIterations(n int) ComputeOpt {
+	return func(o *ComputeOpts) { o.maxIterations = n }
 }

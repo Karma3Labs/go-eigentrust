@@ -29,6 +29,7 @@ func (server *StrictServerImpl) compute(
 	initialTrust *TrustVectorRef, preTrust *TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
+	maxIterations *int,
 ) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
 	logger := server.Logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
@@ -114,6 +115,9 @@ func (server *StrictServerImpl) compute(
 	if numLeaders != nil {
 		opts = append(opts, WithFlatTailNumLeaders(*numLeaders))
 	}
+	if maxIterations != nil {
+		opts = append(opts, WithMaxIterations(*maxIterations))
+	}
 	CanonicalizeTrustVector(p)
 	if t0 != nil {
 		CanonicalizeTrustVector(t0)
@@ -153,7 +157,8 @@ func (server *StrictServerImpl) Compute(
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
 		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders)
+		request.Body.FlatTail, request.Body.NumLeaders,
+		request.Body.MaxIterations)
 	if err != nil {
 		if error400, ok := err.(Error400); ok {
 			var resp Compute400JSONResponse
@@ -173,7 +178,8 @@ func (server *StrictServerImpl) ComputeWithStats(
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
 		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders)
+		request.Body.FlatTail, request.Body.NumLeaders,
+		request.Body.MaxIterations)
 	if err != nil {
 		if error400, ok := err.(Error400); ok {
 			var resp ComputeWithStats400JSONResponse
