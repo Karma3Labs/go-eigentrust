@@ -354,6 +354,8 @@ components:
             properties:
               localTrust:
                 $ref: "#/components/schemas/LocalTrustRef"
+              initialTrust:
+                $ref: "#/components/schemas/TrustVectorRef"
               preTrust:
                 $ref: "#/components/schemas/TrustVectorRef"
               alpha:
