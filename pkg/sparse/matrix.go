@@ -106,13 +106,39 @@ func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 	}, nil
 }
 
-// Mmap swaps out contents onto a temp file and mmaps it, freeing core memory.
+// Mmap swaps out contents onto a temp file and mmap-s it, freeing core memory.
+//
+// If the receiver (m) is Mmap()-ed,
+// future operations on it that replaces its major spans
+// will not automatically map the replaced major spans.
+// If needed, Mmap() can be called again on the same receiver
+// in order to refresh the mapping
+// and ensure that the entirety of the receiver's contents is swapped out.
+// (In this case, Munmap() need not be called first.)
 func (m *CSMatrix) Mmap(ctx context.Context) error {
 	logger := zerolog.Ctx(ctx).
 		With().Str("func", "sparse.(*CSMatrix).Mmap").Logger()
 	if m.mapped != nil {
-		logger.Debug().Msg("already mapped")
-		return nil
+		nnz := uintptr(m.NNZ())
+		start := uintptr(unsafe.Pointer(&m.mapped[0]))
+		end := start + nnz*unsafe.Sizeof(Entry{})
+		dirty := false
+		for _, span := range m.Entries {
+			if len(span) > 0 {
+				spanStart := uintptr(unsafe.SliceData(span))
+				spanLen := uintptr(len(span))
+				spanEnd := spanStart + spanLen*unsafe.Sizeof(Entry{})
+				if spanStart < start || spanEnd > end {
+					dirty = true
+					break
+				}
+			}
+		}
+		if !dirty {
+			logger.Debug().Msg("already mapped")
+			return nil
+		}
+		logger.Debug().Msg("mapped but dirty, reloading")
 	}
 	nnz := m.NNZ()
 	if int(uintptr(nnz)) != nnz {
@@ -144,7 +170,7 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	logger.Trace().Msg("mmapping")
+	logger.Trace().Msg("mmap-ing")
 	mapped, err := syscall.Mmap(int(file.Fd()), 0, int(size),
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 	if err != nil {
@@ -167,7 +193,8 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	entries := unsafe.Slice((*Entry)(unsafe.Pointer(&mapped[0])), nnz)
+	e0 := (*Entry)(unsafe.Pointer(&mapped[0]))
+	entries := unsafe.Slice(e0, nnz)
 	logger.Trace().Msg("copying")
 	var start int
 	for major := range m.Entries {
@@ -185,6 +212,10 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 		panic(fmt.Sprintf("size mismatch: start %#v != nnz %#v", start, nnz))
 	}
 	logger.Trace().Msg("finishing")
+	if m.mapped != nil {
+		// we already copied
+		err := syscall.Munmap(m.mapped)
+	}
 	m.mapped = mapped
 	mapped = nil
 	runtime.SetFinalizer(m, (*CSMatrix).finalize)
@@ -193,13 +224,19 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 }
 
 func (m *CSMatrix) Munmap() error {
-	if m.mapped != nil {
+	if m.mapped == nil {
 		return nil
+	}
+	entries := make([][]Entry, 0, len(m.Entries))
+	for _, span := range m.Entries {
+		spanCopy := append(span[:0:0], span...)
+		entries = append(entries, spanCopy)
 	}
 	err := syscall.Munmap(m.mapped)
 	if err != nil {
 		return err
 	}
+	m.Entries = entries
 	m.mapped = nil
 	return nil
 }
