@@ -23,6 +23,17 @@ type CSMatrix struct {
 	mapped             []byte
 }
 
+// Reset resets the receiver to be empty (0x0).
+func (m *CSMatrix) Reset() {
+	err := m.Munmap()
+	if err != nil {
+		panic(err)
+	}
+	m.MajorDim = 0
+	m.MinorDim = 0
+	m.Entries = nil
+}
+
 // Dim asserts the receiver is a square matrix and returns the dimension.
 func (m *CSMatrix) Dim() (int, error) {
 	if m.MajorDim != m.MinorDim {
