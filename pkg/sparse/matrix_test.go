@@ -8,12 +8,12 @@ import (
 
 func TestCSMatrix_Transpose(t *testing.T) {
 	tests := []struct {
-		name string
-		m    *CSMatrix
-		mt   *CSMatrix
+		name       string
+		original   *CSMatrix
+		transposed *CSMatrix
 	}{
 		{
-			"Normal",
+			name: "Normal",
 			//   ║   0    1    2    3
 			// ══╬═══════════════════
 			// 0 ║ 100  200  300    0
@@ -21,10 +21,10 @@ func TestCSMatrix_Transpose(t *testing.T) {
 			// 2 ║   0    0    0    0
 			// 3 ║ 600  700  800  900
 			// 4 ║   0    0 1000    0
-			&CSMatrix{
-				5,
-				4,
-				[][]Entry{
+			original: &CSMatrix{
+				MajorDim: 5,
+				MinorDim: 4,
+				Entries: [][]Entry{
 					{{0, 100}, {1, 200}, {2, 300}},
 					{{1, 400}, {3, 500}},
 					nil,
@@ -32,10 +32,10 @@ func TestCSMatrix_Transpose(t *testing.T) {
 					{{2, 1000}},
 				},
 			},
-			&CSMatrix{
-				4,
-				5,
-				[][]Entry{
+			transposed: &CSMatrix{
+				MajorDim: 4,
+				MinorDim: 5,
+				Entries: [][]Entry{
 					{{0, 100}, {3, 600}},
 					{{0, 200}, {1, 400}, {3, 700}},
 					{{0, 300}, {3, 800}, {4, 1000}},
@@ -44,13 +44,13 @@ func TestCSMatrix_Transpose(t *testing.T) {
 			},
 		},
 		{
-			"Empty",
-			&CSMatrix{
+			name: "Empty",
+			original: &CSMatrix{
 				MajorDim: 5,
 				MinorDim: 3,
 				Entries:  [][]Entry{nil, nil, nil, nil, nil},
 			},
-			&CSMatrix{
+			transposed: &CSMatrix{
 				MajorDim: 3,
 				MinorDim: 5,
 				Entries:  [][]Entry{nil, nil, nil},
@@ -59,13 +59,15 @@ func TestCSMatrix_Transpose(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mt, _ := tt.m.Transpose(context.Background())
-			if !reflect.DeepEqual(mt, tt.mt) {
-				t.Errorf("m.Transpose() = %v, want %v", mt, tt.mt)
+			mt, _ := tt.original.Transpose(context.Background())
+			if !reflect.DeepEqual(mt, tt.transposed) {
+				t.Errorf("original.Transpose() = %v, want %v", mt,
+					tt.transposed)
 			}
 			mtt, _ := mt.Transpose(context.Background())
-			if !reflect.DeepEqual(mtt, tt.m) {
-				t.Errorf("m.Transpose().Transpose() = %v, want %v", mtt, tt.m)
+			if !reflect.DeepEqual(mtt, tt.original) {
+				t.Errorf("original.Transpose().Transpose() = %v, want %v", mtt,
+					tt.original)
 			}
 		})
 	}
@@ -82,10 +84,10 @@ func TestNewCSRMatrix(t *testing.T) {
 		want *CSRMatrix
 	}{
 		{
-			"Empty",
-			args{0, 0, nil},
-			&CSRMatrix{
-				CSMatrix{
+			name: "Empty",
+			args: args{0, 0, nil},
+			want: &CSRMatrix{
+				CSMatrix: CSMatrix{
 					MajorDim: 0,
 					MinorDim: 0,
 					Entries:  nil,
@@ -100,8 +102,8 @@ func TestNewCSRMatrix(t *testing.T) {
 		// 3 ║ 600  700  800  900
 		// 4 ║   0    0 1000    0
 		{
-			"Normal",
-			args{
+			name: "Normal",
+			args: args{
 				5, 4,
 				[]CooEntry{
 					{0, 0, 100},
@@ -117,11 +119,11 @@ func TestNewCSRMatrix(t *testing.T) {
 					{3, 2, 800},
 				},
 			},
-			&CSRMatrix{
-				CSMatrix{
-					5,
-					4,
-					[][]Entry{
+			want: &CSRMatrix{
+				CSMatrix: CSMatrix{
+					MajorDim: 5,
+					MinorDim: 4,
+					Entries: [][]Entry{
 						{{0, 100}, {1, 200}, {2, 300}},
 						{{1, 400}, {3, 500}},
 						nil,
