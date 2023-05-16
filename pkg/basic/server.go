@@ -299,11 +299,17 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
+	var created bool
+	if request.Params.Merge != nil && *request.Params.Merge {
+		c, created = server.mergeStoredLocalTrust(request.Id, c)
+	} else {
+		created = server.setStoredLocalTrust(request.Id, c)
+	}
 	err = c.Mmap(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot swap out local trust")
+		logger.Err(err).Msg("cannot swap out local trust")
 	}
-	if server.setStoredLocalTrust(request.Id, c) {
+	if created {
 		return UpdateLocalTrust201Response{}, nil
 	} else {
 		return UpdateLocalTrust200Response{}, nil
@@ -428,6 +434,21 @@ func (server *StrictServerImpl) setStoredLocalTrust(
 	server.storedLocalTrust[id] = c
 	return !ok
 }
+
+func (server *StrictServerImpl) mergeStoredLocalTrust(
+	id LocalTrustId, c *sparse.Matrix,
+) (c2 *sparse.Matrix, created bool) {
+	server.storedLocalTrustMtx.Lock()
+	defer server.storedLocalTrustMtx.Unlock()
+	c2, ok := server.storedLocalTrust[id]
+	if ok {
+		c2.Merge(&c.CSMatrix)
+	} else {
+		server.storedLocalTrust[id] = c
+	}
+	return c2, !ok
+}
+
 func (server *StrictServerImpl) deleteStoredLocalTrust(
 	id LocalTrustId,
 ) (deleted bool) {

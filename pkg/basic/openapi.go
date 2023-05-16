@@ -278,6 +278,17 @@ type ComputeWithStatsJSONBody struct {
 	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
 }
 
+// UpdateLocalTrustParams defines parameters for UpdateLocalTrust.
+type UpdateLocalTrustParams struct {
+	// Merge Controls behavior if a local trust exists under the same ID.
+	//
+	// If false (default), the local trust ref contents replaces
+	// the existing one under the same ID, if any.
+	// If true, the local trust ref contents are merged
+	// into the existing one under the same ID.
+	Merge *bool `form:"merge,omitempty" json:"merge,omitempty"`
+}
+
 // ComputeJSONRequestBody defines body for Compute for application/json ContentType.
 type ComputeJSONRequestBody ComputeJSONBody
 
@@ -511,9 +522,9 @@ type ClientInterface interface {
 	HeadLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateLocalTrust request with any body
-	UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ComputeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -600,8 +611,8 @@ func (c *Client) HeadLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEd
 	return c.Client.Do(req)
 }
 
-func (c *Client) UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateLocalTrustRequestWithBody(c.Server, id, contentType, body)
+func (c *Client) UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateLocalTrustRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -612,8 +623,8 @@ func (c *Client) UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdPa
 	return c.Client.Do(req)
 }
 
-func (c *Client) UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateLocalTrustRequest(c.Server, id, body)
+func (c *Client) UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateLocalTrustRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -807,18 +818,18 @@ func NewHeadLocalTrustRequest(server string, id LocalTrustIdParam) (*http.Reques
 }
 
 // NewUpdateLocalTrustRequest calls the generic UpdateLocalTrust builder with application/json body
-func NewUpdateLocalTrustRequest(server string, id LocalTrustIdParam, body UpdateLocalTrustJSONRequestBody) (*http.Request, error) {
+func NewUpdateLocalTrustRequest(server string, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewUpdateLocalTrustRequestWithBody(server, id, "application/json", bodyReader)
+	return NewUpdateLocalTrustRequestWithBody(server, id, params, "application/json", bodyReader)
 }
 
 // NewUpdateLocalTrustRequestWithBody generates requests for UpdateLocalTrust with any type of body
-func NewUpdateLocalTrustRequestWithBody(server string, id LocalTrustIdParam, contentType string, body io.Reader) (*http.Request, error) {
+func NewUpdateLocalTrustRequestWithBody(server string, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -842,6 +853,26 @@ func NewUpdateLocalTrustRequestWithBody(server string, id LocalTrustIdParam, con
 	if err != nil {
 		return nil, err
 	}
+
+	queryValues := queryURL.Query()
+
+	if params.Merge != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "merge", runtime.ParamLocationQuery, *params.Merge); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
@@ -916,9 +947,9 @@ type ClientWithResponsesInterface interface {
 	HeadLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*HeadLocalTrustResponse, error)
 
 	// UpdateLocalTrust request with any body
-	UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
+	UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
 
-	UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
+	UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
 }
 
 type ComputeResponse struct {
@@ -1142,16 +1173,16 @@ func (c *ClientWithResponses) HeadLocalTrustWithResponse(ctx context.Context, id
 }
 
 // UpdateLocalTrustWithBodyWithResponse request with arbitrary body returning *UpdateLocalTrustResponse
-func (c *ClientWithResponses) UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
-	rsp, err := c.UpdateLocalTrustWithBody(ctx, id, contentType, body, reqEditors...)
+func (c *ClientWithResponses) UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
+	rsp, err := c.UpdateLocalTrustWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseUpdateLocalTrustResponse(rsp)
 }
 
-func (c *ClientWithResponses) UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
-	rsp, err := c.UpdateLocalTrust(ctx, id, body, reqEditors...)
+func (c *ClientWithResponses) UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
+	rsp, err := c.UpdateLocalTrust(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -1363,7 +1394,7 @@ type ServerInterface interface {
 	HeadLocalTrust(ctx echo.Context, id LocalTrustIdParam) error
 	// Update local trust
 	// (PUT /local-trust/{id})
-	UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam) error
+	UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam, params UpdateLocalTrustParams) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
@@ -1448,8 +1479,17 @@ func (w *ServerInterfaceWrapper) UpdateLocalTrust(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateLocalTrustParams
+	// ------------- Optional query parameter "merge" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "merge", ctx.QueryParams(), &params.Merge)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter merge: %s", err))
+	}
+
 	// Invoke the callback with all the unmarshalled arguments
-	err = w.Handler.UpdateLocalTrust(ctx, id)
+	err = w.Handler.UpdateLocalTrust(ctx, id, params)
 	return err
 }
 
@@ -1642,8 +1682,9 @@ func (response HeadLocalTrust404Response) VisitHeadLocalTrustResponse(w http.Res
 }
 
 type UpdateLocalTrustRequestObject struct {
-	Id   LocalTrustIdParam `json:"id,omitempty"`
-	Body *UpdateLocalTrustJSONRequestBody
+	Id     LocalTrustIdParam `json:"id,omitempty"`
+	Params UpdateLocalTrustParams
+	Body   *UpdateLocalTrustJSONRequestBody
 }
 
 type UpdateLocalTrustResponseObject interface {
@@ -1844,10 +1885,11 @@ func (sh *strictHandler) HeadLocalTrust(ctx echo.Context, id LocalTrustIdParam) 
 }
 
 // UpdateLocalTrust operation middleware
-func (sh *strictHandler) UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam) error {
+func (sh *strictHandler) UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam, params UpdateLocalTrustParams) error {
 	var request UpdateLocalTrustRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	var body UpdateLocalTrustJSONRequestBody
 	if err := ctx.Bind(&body); err != nil {
@@ -1877,76 +1919,78 @@ func (sh *strictHandler) UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/8xbX3PbOJL/Kij6rta+o2VRtuNEqX3IJJk71+Z2U0l272GYKkNkU0RCAhwAlO1JuSrf",
-	"YV/vXu+D5ZNcdQOkSIqS5UlcNXmJDOFPo/vXf9H6EiSqrJQEaU0w/xJUXPMSLGj6641KePFB18Zepm/x",
-	"GxxMwSRaVFYoGcyDK5FesRSksmCYzYEVuIZZXMQSVRSQ4EwmJPu1BoOfJ7EMwkDg6orbPAgDyUsI5oFI",
-	"gzAwSQ4lx4P+RUMWzIODkzWJJ+5bc9KlLLgLA1OXJde3wdzR7M+/fBXc3YWBBjr6J5UKoHu9VGVVW3jX",
-	"jt/iaKKkBWnxI6+qQiQcqT35ZPCiXwK44WVVuA3+Sxgj5HJNxSZjLiWzuTDMLwt7jFncsoMZE4aVbqOT",
-	"Wn6W6hpZ8xY0ey2WIGlfxoul0sLmZRhLYXEJN6YuIWVWsQUQyw0vgXHH/krDMZ0xieWHnOOK0J/VWeio",
-	"OJgyLlN2EIWxpBEhl+wgYpmqNbOiBFzDyjrJ8f+DqRPcmtUv2OlxBaCbO7JrYfPmSsP7coZTgzBY8aIG",
-	"YnJR5TyYTydRGBQ9ToK0mkT1y5dABPNpGHwK5lEYrIJ5dBd2xmY0durHos5YdPfRY4mQJQshAYkXvwEt",
-	"CCoNO87rnOTOPdu9H8JsAxQvZPq2c8o9+JDKsk8kltmfTJ97NeLAKBRwLFsJd/CzGzec1VJkSpest7Y2",
-	"kDKRMan646aCRGQCUoRFAyEUHmLg29d/HswY1x2kQcrg15oXxS1hDkjZba1lSIjcgoeDWSz3RzOifwKT",
-	"bUiGFehbJaFDyO9EKipEe+ofBa2IrvcCCY82gfShgyJWcWNQbXt3Uhk79QI89BI8Ctl1DhrmsYzlMVoC",
-	"mmqcMaABhzg/OmPfvv6T2WuRQM8m+NnRemKILKTBWTs4DRlJT0MiKq0Sjs7iYPonwxpTFcvWGA3B9dwL",
-	"XSqceBDh5y72OtaqVBoxxKUzVrF82+LaWA1yaXN2eEWSvDrCfaaTiOZdWtBk7ZnNNZhcFSk7vILKiEJJ",
-	"N5UvDEj7HFUCpAMq6BVoVCNkeAoZrwvLCDCxXHDUrrpSbq6sywVolISXw+nREKNOwAOgfjcCp5PZ+QgI",
-	"p5OL81EcurEZjU1/kCWdTmY9WzqdPN0X77N78C7MmM1YCVV3LCvcJFBZD/V/IDsNgcwkvICUpSLLQIO0",
-	"xe1znDEGBhLCEBJLsQLJ4AZjBWHJ6nScLtLisFfACgqDRq+llWR8eDAlU4kXSriBo1imivxAzlfgTSJC",
-	"3ROqNEu4VFIkvBC/QdrsmBTCQVPJgkaEZhoKbsUKWMmXUtg6xU8WAztPJbSEM7F54Vi2d/1zBMfR9CrE",
-	"46eTafMvOiL7TZYgExK0Uzy6ofgNjp0CeK3A7SI4fsJO2Glvp9NvX//vKIylUUxYdi2Kgln+GZwmt3SZ",
-	"9d4b0o0lukdaqcGgBgrplvMkqTW3wDSXn4VchrEE8m3oIRgvFZn+a9DHOAFSr5oSuHbC46Jw1qHvqlGL",
-	"idONUbW5qpd5GMsByxAjKWRCCgt4omRqBfqzKIq5k0ArJE+hJ6rva+lqCIok53IJseSZRVOCFHCWwXWH",
-	"T0TuK4SbqnAPRDnIRNWaL52/hJsKtChB2liivbW1BNbCmjwq4UcCpAY5NllOMEhooMWsqujQpEA+XQsp",
-	"m4NwCQUNnCWKa4MIL7hegj7qnEDXKcRn5Iips0wksJcldC77sJYSEjCGa1HcHhHymN97m61svp6TVB7F",
-	"ez+G1Xxg/HnXTZ0qjfK3Pt3xzEBDStqIfDkPA4wIuQ3mQarqBbmakt+Isi7pzFJI93kaBva2wlOdE8N0",
-	"q2Xpl+/ZJSu4/cBFMWbjgRXOX6uMYIdzSSNjedhoSy2dSqQs06pcm4ZWH458AFtSzIkeGyRbQEZhAuhS",
-	"SE45jyVdTGptXHo6ZSVwiV69PZbQTWro9wm9/nSXkjvy+0LKjCoQ5Z1QwPPNAX6EN0JaWDrmoNUQHZzu",
-	"yoZp0j8gsUq/gwxX9zG+Xybtl5b8pvWAZlw0XsKdqKZjqp15us5FkqM5MVZVsQT0lGhGbI6eouG9kizR",
-	"uFZwZ0KUZSXYjgikYoUohd2HZbIu3wBPffFik+w1uVZVxw2KvA1XLFHSiBR0LDPlPEBV60oZMvgIhGMC",
-	"QptZTRhrqGzyj32o7Cr+Q4TqCxlCQxrMf+lK+GN7jFp8gsQGZA3693/bFnYY3g5NNNVAmC+OOMrXB1hd",
-	"gzvSVEqaXt3kv4XN31tuzTv/5d/+skf9ZJt1gjZpfTjMGwtC1Ny3/Ofe5CE/O2QM992Hv+/rBN1SVmNs",
-	"4XnrrEMnKTeJ0rAOwBresoVKcZG0XEgXxLY7uCUY215DUeD/K67RysXSWG6FsSIxlDl5PBt2WHJ562IL",
-	"nyN7+znAL2Ugd2FwKVe8EKmvhj2wEvbafR7JS1+wtpjI6ACn76C10g5trbcu0aEvkcEJl2gDCsXTbgo7",
-	"Z75A1strNWSMBLPT+7WbDwl8RX8tfN2S6MLYkbO8Lrk81sBTviiA+Q18oshKfos+AMrK+jqDB4exWsjl",
-	"BrCa8/dB0UuK5BlmmhguCieZro6ub0qX+3moAP39ft6UOkPYOMRQeOVhMwnCAd9SKCz/q9LluDFtciJu",
-	"GhedA0+bzwU3do05qgtRkoPu1xWerKLg7ZgCUO8XvZ+4xgwbYVBTeWbM9BLfR0KPXeGGCyjGb7M+w4cd",
-	"h4bfhuwNpXGSkn53pzf/HnWdXc7TdVLnWXnUXNcnp6NekuKSRNVFSgEFX0Eay8Xt9ivH8rDipv0Whe6q",
-	"XY2Gr5NVlDBbQKGuj2J5nYsCc6FcwKqJdRy1lC3t47H8vcY5Z5RGM9N4U1/hYEKmIiFb99ZlVcqyTNUy",
-	"ZTlocAnub6AVWxZq0Wi0fxmwUDrN3UmVH+Fa81v6u7n/Fjrr5RKoYOS37TBsbagOG96iEC+ty+BcuNKE",
-	"mRkvTCceNUwtqBKUTmLpreGcXWaMtzypKPGW7MVPL1+9ev369euf23/smq83iOUh8CRnBeB8KjqxFC28",
-	"TGwLriZ+9SpDG2hcRqnXQtmcvXpF6o0nUVQ1pDiWKmtwHtHUU/JFkGAySnWMy05ZImQfGk79+YwKxC0r",
-	"hWRKpxjRKSaWUmkgVTGbZ96Ps2F847S1K9ewY5PWqNy0q+jSMD/a9TzzDjIf9vVrpSW3Wtyw2KdYceAr",
-	"AMZ661YpISlpONRAZaOEpIIbSQY3KGiqLxirNPScmHvBSbjGXM97efKzrQXdJCSWmPYK6fMMdyAwd1Mm",
-	"rIEic6wdBFVNRjm898tulCGVPCYl9NOZP2iTDhezUMVVn7jKK7CKC90+QTi9RrihlVqiutDWqdBIaq+K",
-	"L1XrwQtnD3NRDZR/VyQ3FO9rafXtmE1w6fGm418/Vw4Ls5scaIgW1jDza403TEUJ0oiNRC66F9VEUNiK",
-	"Zx/susuNALjSYAg9CDycdI/41tfmlinZFCGvxNURqwqeuDJ2R1wUDUmXsvm5n66OyE3x5pUoYbxUtbTs",
-	"8Gp15Wva6/hwrB59vu39o49gsVtu7XslEtaEZmQxEXW++ihkCjc+UW9qAAUY0y9VssNWnkdkGikclEmh",
-	"Nl6HWm7e6zM/7UG+Lzn+Aalf7cQbnnBYKSPQXRw1AMCj8ZhYEpioOk2ouRJXiCT3+dPV74jdBkokAuQv",
-	"Urldfzq54m7j71izopk/zux3d73f7ndn72/xe2q25eHlfF2a3KMo2d1mx8zzTW39Pn/Tvb97tyNbfI9n",
-	"GeDuwf6jA5HtDsSzYDO5zcQNpueU87GrNXCohu4aYlwKh8NrQXrRSQT6Lw1jP27kkN/hunrQY63rcvHU",
-	"wx2WY0C4v+faYOuPdl2NzgrDvKWhrH3tzX6Xh+rX8b3yPNQrfZ8571e81zZ8oB6Par07LG2M948x2OPG",
-	"utfHtZW1fEtXWcuMNz61j0YUqV/gpueQ4m8ZSb4v2226/qZfcvIG2c0OGf+M0FXs7+8u/dioioeB8wzE",
-	"BWELuGfjyb11JU/uRwStkuCv9JCwOcCluxa8J5K7Cz6iSvTZo8czqb181M6ntmgsUJxOf5QPw83TYB6c",
-	"Bp1ZXkjtlyCXfAklSDs2awzRGzzbO/X0oYPqdpeQMXm/kUqicREpSEt9Wu5pFI385SvvkcZyQpE+rKty",
-	"qMTpqAYPivJ7x1qOwocAtxvS3Y1XU4XMFKly+5b8oV+B/4kbkbAXby8ZvTGXrUV0X4w10JEmeo0d2wlt",
-	"G9DzXzAPppNoMkW2qAokrwTii4ZC6nUlOZz44j6VqtUYQvw7y+bTgS8PIsGu+UTIqrbuReHF8EmHOimM",
-	"649y86gFhrF/Y2823GyIFt9UXBtgaOrdvHX/VBtP7JzVdFmF9HSq6HX1mELnJlpZgL0GkMx1e0Vug9dU",
-	"e28LPQ9Y7R5SRgo4wrAGvM8ZLwr38ugaFRTxmRcegpUvyqIHalgfdLuGb7fpTa+x+GSkq3j4gDabTh/4",
-	"vrK77c9XmNuHJF8K/vb1f0Z7KL59/d/OW4ILs313HS5zzRzOmuRimROGnPR5UUPIMCCB4jaWmSoKdd3J",
-	"8Q6mz5lrzXOBDG+WUln0YX1uW1KZs+np6ezZaXR68exsdnExbCmLLqYXZ8+i0/PpxcX56cXFIJY7m50/",
-	"m0Xn51E0exo9PT+/p53ivv6zBzLeJXU7u1c6smF8oVbuvemvmEZQ1NsJ7dcdbNTnpLSLI51DIE1Q7sVi",
-	"sxWOyFhHndSFFf1r2wKXQBjLFEoljdXr3ghqnOlVnDu9TI/QvbMbAU+ePY2ms7Mnp0/GITB9Gj17evbs",
-	"6ezJOAZm0bNn0ez8yf09iPv9FmHjof4RHofXQdZgVetMCZa+jOHf2fzTjJAMyQGZ0gMN1etV1rY0rjBh",
-	"MoraJxVTC0zXW1/dvA66l+IzZ77GTaE3cyeD5+S73q8ztno2mtd4xmNEy7Fp3jR/oJN8D8CaU6gRIoXm",
-	"eQKZTl1ua2Vwas7tujd/VGZtg/72N3lUVg221rIxiKNup+2seFz/s1uAO7o8HhcD3jzBDSQ19Qqsueng",
-	"QX7ehRonX0R655+pwcVSfY6+ovFOHB72fty0JeJcTznZ/PETGowBO8+29K51AhI0l47IlJmOIZj8bm7i",
-	"sj0OThW4d1e4EcZOBlJw/OkuwI2XMJqwIHA7CkWLRt+4mPMN66rXGNj/A+xjy2X6oIakhyXNZOB/gATe",
-	"AXq51YYMcuDpViHMpmdMZENZND+DwWNMyM6mZy7evRYGxiTwn8DTP4BqOHonPwjRL3NIPpNRp69d2Twb",
-	"creq7ViJh6dksBtkJzzJYViRjCU1AIzzflDh7fP771XKH8UYPeQHjA/9ZeWWYObFZg+WooatCWMvXeAx",
-	"Vvfe7C4cV9r7jWlNzBwxprNptN8OiQb+48xxD4RO0n3Q0Qwq5zhZbxL44u1l83OiXNHD4OKW/YXrkp+y",
-	"N3zhuydqXQTzILe2MvOTE16JyefTYiLUyYIbkZysohMqXI30vkCRHfuNHWXusJDpWuJRV9T96HN4/Opq",
-	"eOL8xHlf3GX+dPp02h4a3H28+/8AAAD//8TMDD1HPAAA",
+	"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",
+	"p82lwf3H+/8PAAD//41zFYmWPQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -123,6 +123,17 @@ paths:
       operationId: updateLocalTrust
       parameters:
         - $ref: "#/components/parameters/LocalTrustIdParam"
+        - name: merge
+          in: query
+          schema:
+            type: boolean
+          description: |
+            Controls behavior if a local trust exists under the same ID.
+
+            If false (default), the local trust ref contents replaces
+            the existing one under the same ID, if any.
+            If true, the local trust ref contents are merged
+            into the existing one under the same ID.
       requestBody:
         description: A local trust ref to load.  Can be an inline reference.
         content:
