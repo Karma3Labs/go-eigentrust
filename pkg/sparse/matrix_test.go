@@ -73,6 +73,70 @@ func TestCSMatrix_Transpose(t *testing.T) {
 	}
 }
 
+func TestCSMatrix_Merge(t *testing.T) {
+	tests := []struct {
+		name   string
+		m      *CSMatrix
+		m2     *CSMatrix
+		merged *CSMatrix
+	}{
+		{
+			name:   "Empty",
+			m:      &CSMatrix{},
+			m2:     &CSMatrix{},
+			merged: &CSMatrix{},
+		},
+		{
+			// |0 0 0|       |8 0 8 0|    |8 0 8 0|
+			// |0 0 5|.Merge(|8 0 0 0|) = |8 0 5 0|
+			// |0 5 5|       |0 8 0 8|    |0 8 5 8|
+			//               |0 8 8 0|    |0 8 8 0|
+			name: "Normal",
+			m: &CSMatrix{
+				MajorDim: 3,
+				MinorDim: 3,
+				Entries: [][]Entry{
+					nil,
+					{{2, 5}},
+					{{1, 5}, {2, 5}},
+				},
+			},
+			m2: &CSMatrix{
+				MajorDim: 4,
+				MinorDim: 4,
+				Entries: [][]Entry{
+					{{0, 8}, {2, 8}},
+					{{0, 8}},
+					{{1, 8}, {3, 8}},
+					{{1, 8}, {2, 8}},
+				},
+			},
+			merged: &CSMatrix{
+				MajorDim: 4,
+				MinorDim: 4,
+				Entries: [][]Entry{
+					{{0, 8}, {2, 8}},
+					{{0, 8}, {2, 5}},
+					{{1, 8}, {2, 5}, {3, 8}},
+					{{1, 8}, {2, 8}},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.m.Merge(tt.m2)
+			if !reflect.DeepEqual(tt.m, tt.merged) {
+				t.Errorf("m.Merge(m2) = %#v, want %#v", tt.m, tt.merged)
+			}
+			reset := &CSMatrix{}
+			if !reflect.DeepEqual(tt.m2, reset) {
+				t.Errorf("m2 = %#v, want %#v", tt.m2, reset)
+			}
+		})
+	}
+}
+
 func TestNewCSRMatrix(t *testing.T) {
 	type args struct {
 		rows, cols int

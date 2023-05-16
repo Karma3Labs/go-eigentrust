@@ -106,6 +106,63 @@ func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 	}, nil
 }
 
+func mergeSpan(s1, s2 []Entry) []Entry {
+	switch {
+	case len(s1) == 0 && len(s2) == 0:
+		return nil
+	case len(s1) == 0:
+		return s2
+	case len(s2) == 0:
+		return s1
+	}
+	s := make([]Entry, 0, len(s1)+len(s2)) // worst case, shrink-wrap later
+	i1, i2 := 0, 0
+	var more1, more2 bool
+	updateMore := func() { more1, more2 = i1 < len(s1), i2 < len(s2) }
+	for updateMore(); more1 || more2; updateMore() {
+		switch {
+		case !more2:
+			s = append(s, s1[i1])
+			i1++
+		case !more1:
+			s = append(s, s2[i2])
+			i2++
+		default:
+			index1, index2 := s1[i1].Index, s2[i2].Index
+			switch {
+			case index1 < index2:
+				s = append(s, s1[i1])
+				i1++
+			case index2 < index1:
+				s = append(s, s2[i2])
+				i2++
+			default: // s1[i1].Index == s2[i2].Index, s2 wins
+				s = append(s, s2[i2])
+				i1++
+				i2++
+			}
+		}
+	}
+	return append(s[:0:0], s...) // shrink-wrap
+}
+
+// Merge merges the given matrix (m2) into the receiver.
+//
+// If both m and m2 contain an entry at the same location, m2's entry wins.
+//
+// m2 is reset after merge.
+func (m *CSMatrix) Merge(m2 *CSMatrix) {
+	// Load m2 back into memory, we are about to merge/reuse its spans in m.
+	m2.Munmap()
+
+	m.SetMajorDim(max(m.MajorDim, m2.MajorDim)) // also resizes m.Entries
+	m.SetMinorDim(max(m.MinorDim, m2.MinorDim))
+	for i := 0; i < m2.MajorDim; i++ {
+		m.Entries[i] = mergeSpan(m.Entries[i], m2.Entries[i])
+	}
+	m2.Reset()
+}
+
 // Mmap swaps out contents onto a temp file and mmap-s it, freeing core memory.
 //
 // If the receiver (m) is Mmap()-ed,
@@ -125,7 +182,7 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 		dirty := false
 		for _, span := range m.Entries {
 			if len(span) > 0 {
-				spanStart := uintptr(unsafe.SliceData(span))
+				spanStart := uintptr(unsafe.Pointer(unsafe.SliceData(span)))
 				spanLen := uintptr(len(span))
 				spanEnd := spanStart + spanLen*unsafe.Sizeof(Entry{})
 				if spanStart < start || spanEnd > end {
@@ -215,6 +272,9 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	if m.mapped != nil {
 		// we already copied
 		err := syscall.Munmap(m.mapped)
+		if err != nil {
+			logger.Err(err).Msg("cannot Munmap() old mapping while remapping")
+		}
 	}
 	m.mapped = mapped
 	mapped = nil
