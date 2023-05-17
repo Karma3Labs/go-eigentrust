@@ -278,7 +278,15 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	}
 	m.mapped = mapped
 	mapped = nil
-	runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Info().Interface("panic",
+					r).Msg("recovered from redundant SetFinalizer")
+			}
+		}()
+		runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	}()
 	logger.Trace().Msg("done")
 	return nil
 }
