@@ -99,11 +99,13 @@ func (m *CSMatrix) Transpose(ctx context.Context) (*CSMatrix, error) {
 				Entry{Index: row, Value: e.Value})
 		}
 	}
-	return &CSMatrix{
+	mt := &CSMatrix{
 		MajorDim: m.MinorDim,
 		MinorDim: m.MajorDim,
 		Entries:  transposedEntries,
-	}, nil
+	}
+	runtime.SetFinalizer(mt, (*CSMatrix).finalize)
+	return mt, nil
 }
 
 func mergeSpan(s1, s2 []Entry) []Entry {
@@ -278,15 +280,6 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	}
 	m.mapped = mapped
 	mapped = nil
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Info().Interface("panic",
-					r).Msg("recovered from redundant SetFinalizer")
-			}
-		}()
-		runtime.SetFinalizer(m, (*CSMatrix).finalize)
-	}()
 	logger.Trace().Msg("done")
 	return nil
 }
@@ -351,13 +344,15 @@ func NewCSRMatrix(
 	for _, row := range entries2 {
 		sort.Sort(EntriesByIndex(row))
 	}
-	return &CSRMatrix{
+	m := &CSRMatrix{
 		CSMatrix{
 			MajorDim: rows,
 			MinorDim: cols,
 			Entries:  entries2,
 		},
 	}
+	runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	return m
 }
 
 // Dims returns the numbers of rows/columns.
