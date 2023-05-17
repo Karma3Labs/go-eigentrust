@@ -351,7 +351,7 @@ func NewCSRMatrix(
 			Entries:  entries2,
 		},
 	}
-	runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	runtime.SetFinalizer(&m.CSMatrix, (*CSMatrix).finalize)
 	return m
 }
 
