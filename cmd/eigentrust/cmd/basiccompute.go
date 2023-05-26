@@ -85,11 +85,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
 			fmt.Sprintf(format, v...))
 	}
-	inline := basic.InlineLocalTrust{
-		Entries: nil,
-		Scheme:  "inline",
-		Size:    0,
-	}
+	inline := basic.InlineLocalTrust{}
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
 		if len(fields) < 2 {

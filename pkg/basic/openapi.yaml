@@ -114,47 +114,114 @@ paths:
           $ref: '#/components/responses/ComputeWithStatsResponseOK'
         "400":
           $ref: "#/components/responses/InvalidRequest"
+  /local-trust/{id}:
+    put:
+      summary: Update local trust
+      description: |
+        Load and locally cache the local trust
+        from the given local trust reference.
+      operationId: updateLocalTrust
+      parameters:
+        - $ref: "#/components/parameters/LocalTrustIdParam"
+        - name: merge
+          in: query
+          schema:
+            type: boolean
+          description: |
+            Controls behavior if a local trust exists under the same ID.
+
+            If false (default), the local trust ref contents replaces
+            the existing one under the same ID, if any.
+            If true, the local trust ref contents are merged
+            into the existing one under the same ID.
+      requestBody:
+        description: A local trust ref to load.  Can be an inline reference.
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/LocalTrustRef"
+        required: true
+      responses:
+        "200":
+          description: The local trust was updated successfully.
+        "201":
+          description: The local trust was created successfully.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+    delete:
+      summary: Delete local trust
+      operationId: deleteLocalTrust
+      parameters:
+        - $ref: "#/components/parameters/LocalTrustIdParam"
+      responses:
+        "204":
+          description: The local trust was deleted successfully.
+        "404":
+          description: The local trust does not exist.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+    get:
+      summary: Retrieve local trust
+      description: |
+        Return the given locally stored local trust as an inline ref.
+      operationId: getLocalTrust
+      parameters:
+        - $ref: "#/components/parameters/LocalTrustIdParam"
+      responses:
+        "200":
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/InlineLocalTrust"
+        "404":
+          description: The local trust does not exist.
+    head:
+      summary: Check for existence of local trust
+      description: |
+        Return 204 if the given local trust exists, 404 otherwise.
+      operationId: headLocalTrust
+      parameters:
+        - $ref: "#/components/parameters/LocalTrustIdParam"
+      responses:
+        "204":
+          description: The local trust exists.
+        "404":
+          description: The local trust does not exist.
 components:
+  parameters:
+    LocalTrustIdParam:
+      summary: Local trust ID
+      description: |
+        `id` denotes the local trust collection in question.
+      name: id
+      in: path
+      schema:
+        $ref: "#/components/schemas/LocalTrustId"
   schemas:
+    LocalTrustId:
+      description: |
+        Denotes a local trust collection.
+      type: string
+      minLength: 1
     LocalTrustRef:
       description: |
         refers to a local trust.
       type: object
-      oneOf:
-        - $ref: "#/components/schemas/InlineLocalTrust"
-    InlineLocalTrust:
-      description: |
-        Refers to a local trust matrix "inline".
-
-        Instead of pointing (referencing) to an externally stored local trust,
-        it carries the contents of the local trust matrix
-        within the reference object itself.
-      type: object
-      required:
-        - scheme
-        - size
-        - entries
-      properties:
-        scheme:
-          description: |
-            A fixed string `"inline"` to denote an inline reference.
-          type: string
-          enum: [ "inline" ]
-        size:
-          description: |
-            Denotes the number of peers in the local trust,
-            i.e. its square dimension.
-          type: integer
-          minimum: 1
-        entries:
-          description: |
-            Contains the non-zero entries in the local trust matrix.
-
-            Truster/trustee pairs missing here are assigned zero direct trust,
-            i.e. no trust relationship.
-          type: array
-          items:
-            $ref: "#/components/schemas/InlineLocalTrustEntry"
+      allOf:
+        - properties:
+            scheme:
+              title: Local trust reference scheme.
+              description: |
+                Local trust reference scheme, akin to URI scheme.
+              type: string
+              enum:
+                - inline
+                - stored
+          required:
+            - scheme
+        - oneOf:
+            - $ref: "#/components/schemas/InlineLocalTrust"
+            - $ref: "#/components/schemas/StoredLocalTrust"
       examples:
         - scheme: inline
           size: 3
@@ -171,6 +238,37 @@ components:
         - scheme: inline
           size: 5
           entries: [ ]
+        - scheme: stored
+          id: "3"
+        - scheme: stored
+          id: engagement
+    InlineLocalTrust:
+      description: |
+        Refers to a local trust matrix "inline".
+
+        Instead of pointing (referencing) to an externally stored local trust,
+        it carries the contents of the local trust matrix
+        within the reference object itself.
+      type: object
+      required:
+        - size
+        - entries
+      properties:
+        size:
+          description: |
+            Denotes the number of peers in the local trust,
+            i.e. its square dimension.
+          type: integer
+          minimum: 1
+        entries:
+          description: |
+            Contains the non-zero entries in the local trust matrix.
+
+            Truster/trustee pairs missing here are assigned zero direct trust,
+            i.e. no trust relationship.
+          type: array
+          items:
+            $ref: "#/components/schemas/InlineLocalTrustEntry"
     InlineLocalTrustEntry:
       description: |
         Represents an entry in the local trust matrix.
@@ -215,6 +313,17 @@ components:
         - i: 1
           j: 2
           v: 1
+    StoredLocalTrust:
+      description: |
+        Refers to a local trust stored on the server.
+        
+        Stored local trust is identified with its ID string.
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          $ref: "#/components/schemas/LocalTrustId"
     TrustVectorRef:
       description: |
         Refers to a trust vector.

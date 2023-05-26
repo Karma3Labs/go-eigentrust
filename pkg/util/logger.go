@@ -1,7 +1,6 @@
 package util
 
 import (
-	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -40,19 +39,4 @@ func (p *TimeLogger) Log(name string) {
 		Dur("cumulative", cumulative).
 		Msg("finished lap")
 	p.LapStart = now
-}
-
-type loggerKeyType struct{}
-
-var loggerKey = loggerKeyType{}
-
-func SetLoggerInContext(
-	ctx context.Context, logger zerolog.Logger,
-) context.Context {
-	return context.WithValue(ctx, loggerKey, logger)
-}
-
-func LoggerInContext(ctx context.Context) (logger zerolog.Logger, ok bool) {
-	logger, ok = ctx.Value(loggerKey).(zerolog.Logger)
-	return
 }

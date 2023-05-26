@@ -21,14 +21,15 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Defines values for InlineLocalTrustScheme.
-const (
-	InlineLocalTrustSchemeInline InlineLocalTrustScheme = "inline"
-)
-
 // Defines values for InlineTrustVectorScheme.
 const (
 	InlineTrustVectorSchemeInline InlineTrustVectorScheme = "inline"
+)
+
+// Defines values for LocalTrustRefScheme.
+const (
+	LocalTrustRefSchemeInline LocalTrustRefScheme = "inline"
+	LocalTrustRefSchemeStored LocalTrustRefScheme = "stored"
 )
 
 // FlatTailStats Flat-tail algorithm stats and peer ranking.
@@ -73,16 +74,10 @@ type InlineLocalTrust struct {
 	// i.e. no trust relationship.
 	Entries []InlineLocalTrustEntry `json:"entries"`
 
-	// Scheme A fixed string `"inline"` to denote an inline reference.
-	Scheme InlineLocalTrustScheme `json:"scheme"`
-
 	// Size Denotes the number of peers in the local trust,
 	// i.e. its square dimension.
 	Size int `json:"size"`
 }
-
-// InlineLocalTrustScheme A fixed string `"inline"` to denote an inline reference.
-type InlineLocalTrustScheme string
 
 // InlineLocalTrustEntry Represents an entry in the local trust matrix.
 //
@@ -144,15 +139,34 @@ type InlineTrustVectorEntry struct {
 	V float64 `json:"v"`
 }
 
-// LocalTrustRef refers to a local trust.
+// LocalTrustId Denotes a local trust collection.
+type LocalTrustId = string
+
+// LocalTrustRef defines model for LocalTrustRef.
 type LocalTrustRef struct {
-	union json.RawMessage
+	// Scheme Local trust reference scheme, akin to URI scheme.
+	Scheme LocalTrustRefScheme `json:"scheme"`
+	union  json.RawMessage
+}
+
+// LocalTrustRefScheme Local trust reference scheme, akin to URI scheme.
+type LocalTrustRefScheme string
+
+// StoredLocalTrust Refers to a local trust stored on the server.
+//
+// Stored local trust is identified with its ID string.
+type StoredLocalTrust struct {
+	// Id Denotes a local trust collection.
+	Id LocalTrustId `json:"id"`
 }
 
 // TrustVectorRef Refers to a trust vector.
 type TrustVectorRef struct {
 	union json.RawMessage
 }
+
+// LocalTrustIdParam Denotes a local trust collection.
+type LocalTrustIdParam = LocalTrustId
 
 // ComputeWithStatsResponseOK defines model for ComputeWithStatsResponseOK.
 type ComputeWithStatsResponseOK struct {
@@ -264,11 +278,25 @@ type ComputeWithStatsJSONBody struct {
 	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
 }
 
+// UpdateLocalTrustParams defines parameters for UpdateLocalTrust.
+type UpdateLocalTrustParams struct {
+	// Merge Controls behavior if a local trust exists under the same ID.
+	//
+	// If false (default), the local trust ref contents replaces
+	// the existing one under the same ID, if any.
+	// If true, the local trust ref contents are merged
+	// into the existing one under the same ID.
+	Merge *bool `form:"merge,omitempty" json:"merge,omitempty"`
+}
+
 // ComputeJSONRequestBody defines body for Compute for application/json ContentType.
 type ComputeJSONRequestBody ComputeJSONBody
 
 // ComputeWithStatsJSONRequestBody defines body for ComputeWithStats for application/json ContentType.
 type ComputeWithStatsJSONRequestBody ComputeWithStatsJSONBody
+
+// UpdateLocalTrustJSONRequestBody defines body for UpdateLocalTrust for application/json ContentType.
+type UpdateLocalTrustJSONRequestBody = LocalTrustRef
 
 // AsInlineLocalTrust returns the union data inside the LocalTrustRef as a InlineLocalTrust
 func (t LocalTrustRef) AsInlineLocalTrust() (InlineLocalTrust, error) {
@@ -296,13 +324,72 @@ func (t *LocalTrustRef) MergeInlineLocalTrust(v InlineLocalTrust) error {
 	return err
 }
 
+// AsStoredLocalTrust returns the union data inside the LocalTrustRef as a StoredLocalTrust
+func (t LocalTrustRef) AsStoredLocalTrust() (StoredLocalTrust, error) {
+	var body StoredLocalTrust
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromStoredLocalTrust overwrites any union data inside the LocalTrustRef as the provided StoredLocalTrust
+func (t *LocalTrustRef) FromStoredLocalTrust(v StoredLocalTrust) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeStoredLocalTrust performs a merge with any union data inside the LocalTrustRef, using the provided StoredLocalTrust
+func (t *LocalTrustRef) MergeStoredLocalTrust(v StoredLocalTrust) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JsonMerge(b, t.union)
+	t.union = merged
+	return err
+}
+
 func (t LocalTrustRef) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["scheme"], err = json.Marshal(t.Scheme)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'scheme': %w", err)
+	}
+
+	b, err = json.Marshal(object)
 	return b, err
 }
 
 func (t *LocalTrustRef) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["scheme"]; found {
+		err = json.Unmarshal(raw, &t.Scheme)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheme': %w", err)
+		}
+	}
+
 	return err
 }
 
@@ -424,6 +511,20 @@ type ClientInterface interface {
 	ComputeWithStatsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	ComputeWithStats(ctx context.Context, body ComputeWithStatsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteLocalTrust request
+	DeleteLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLocalTrust request
+	GetLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadLocalTrust request
+	HeadLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateLocalTrust request with any body
+	UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ComputeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -464,6 +565,66 @@ func (c *Client) ComputeWithStatsWithBody(ctx context.Context, contentType strin
 
 func (c *Client) ComputeWithStats(ctx context.Context, body ComputeWithStatsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewComputeWithStatsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteLocalTrustRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLocalTrustRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadLocalTrust(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadLocalTrustRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateLocalTrustWithBody(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateLocalTrustRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateLocalTrust(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateLocalTrustRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -554,6 +715,175 @@ func NewComputeWithStatsRequestWithBody(server string, contentType string, body 
 	return req, nil
 }
 
+// NewDeleteLocalTrustRequest generates requests for DeleteLocalTrust
+func NewDeleteLocalTrustRequest(server string, id LocalTrustIdParam) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/local-trust/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetLocalTrustRequest generates requests for GetLocalTrust
+func NewGetLocalTrustRequest(server string, id LocalTrustIdParam) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/local-trust/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadLocalTrustRequest generates requests for HeadLocalTrust
+func NewHeadLocalTrustRequest(server string, id LocalTrustIdParam) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/local-trust/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateLocalTrustRequest calls the generic UpdateLocalTrust builder with application/json body
+func NewUpdateLocalTrustRequest(server string, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateLocalTrustRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewUpdateLocalTrustRequestWithBody generates requests for UpdateLocalTrust with any type of body
+func NewUpdateLocalTrustRequestWithBody(server string, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/local-trust/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	queryValues := queryURL.Query()
+
+	if params.Merge != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "merge", runtime.ParamLocationQuery, *params.Merge); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -606,6 +936,20 @@ type ClientWithResponsesInterface interface {
 	ComputeWithStatsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComputeWithStatsResponse, error)
 
 	ComputeWithStatsWithResponse(ctx context.Context, body ComputeWithStatsJSONRequestBody, reqEditors ...RequestEditorFn) (*ComputeWithStatsResponse, error)
+
+	// DeleteLocalTrust request
+	DeleteLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*DeleteLocalTrustResponse, error)
+
+	// GetLocalTrust request
+	GetLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*GetLocalTrustResponse, error)
+
+	// HeadLocalTrust request
+	HeadLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*HeadLocalTrustResponse, error)
+
+	// UpdateLocalTrust request with any body
+	UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
+
+	UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error)
 }
 
 type ComputeResponse struct {
@@ -670,6 +1014,103 @@ func (r ComputeWithStatsResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteLocalTrustResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *struct {
+		// Message Describes the error in a human-readable message.
+		//
+		// It may be empty.
+		Message string `json:"message"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteLocalTrustResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteLocalTrustResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLocalTrustResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InlineLocalTrust
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLocalTrustResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLocalTrustResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadLocalTrustResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadLocalTrustResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadLocalTrustResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateLocalTrustResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *struct {
+		// Message Describes the error in a human-readable message.
+		//
+		// It may be empty.
+		Message string `json:"message"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateLocalTrustResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateLocalTrustResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // ComputeWithBodyWithResponse request with arbitrary body returning *ComputeResponse
 func (c *ClientWithResponses) ComputeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComputeResponse, error) {
 	rsp, err := c.ComputeWithBody(ctx, contentType, body, reqEditors...)
@@ -702,6 +1143,50 @@ func (c *ClientWithResponses) ComputeWithStatsWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseComputeWithStatsResponse(rsp)
+}
+
+// DeleteLocalTrustWithResponse request returning *DeleteLocalTrustResponse
+func (c *ClientWithResponses) DeleteLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*DeleteLocalTrustResponse, error) {
+	rsp, err := c.DeleteLocalTrust(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteLocalTrustResponse(rsp)
+}
+
+// GetLocalTrustWithResponse request returning *GetLocalTrustResponse
+func (c *ClientWithResponses) GetLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*GetLocalTrustResponse, error) {
+	rsp, err := c.GetLocalTrust(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLocalTrustResponse(rsp)
+}
+
+// HeadLocalTrustWithResponse request returning *HeadLocalTrustResponse
+func (c *ClientWithResponses) HeadLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, reqEditors ...RequestEditorFn) (*HeadLocalTrustResponse, error) {
+	rsp, err := c.HeadLocalTrust(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadLocalTrustResponse(rsp)
+}
+
+// UpdateLocalTrustWithBodyWithResponse request with arbitrary body returning *UpdateLocalTrustResponse
+func (c *ClientWithResponses) UpdateLocalTrustWithBodyWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
+	rsp, err := c.UpdateLocalTrustWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateLocalTrustResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateLocalTrustWithResponse(ctx context.Context, id LocalTrustIdParam, params *UpdateLocalTrustParams, body UpdateLocalTrustJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLocalTrustResponse, error) {
+	rsp, err := c.UpdateLocalTrust(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateLocalTrustResponse(rsp)
 }
 
 // ParseComputeResponse parses an HTTP response from a ComputeWithResponse call
@@ -786,6 +1271,110 @@ func ParseComputeWithStatsResponse(rsp *http.Response) (*ComputeWithStatsRespons
 	return response, nil
 }
 
+// ParseDeleteLocalTrustResponse parses an HTTP response from a DeleteLocalTrustWithResponse call
+func ParseDeleteLocalTrustResponse(rsp *http.Response) (*DeleteLocalTrustResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteLocalTrustResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			// Message Describes the error in a human-readable message.
+			//
+			// It may be empty.
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLocalTrustResponse parses an HTTP response from a GetLocalTrustWithResponse call
+func ParseGetLocalTrustResponse(rsp *http.Response) (*GetLocalTrustResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLocalTrustResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InlineLocalTrust
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadLocalTrustResponse parses an HTTP response from a HeadLocalTrustWithResponse call
+func ParseHeadLocalTrustResponse(rsp *http.Response) (*HeadLocalTrustResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadLocalTrustResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseUpdateLocalTrustResponse parses an HTTP response from a UpdateLocalTrustWithResponse call
+func ParseUpdateLocalTrustResponse(rsp *http.Response) (*UpdateLocalTrustResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateLocalTrustResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			// Message Describes the error in a human-readable message.
+			//
+			// It may be empty.
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Compute EigenTrust scores
@@ -794,6 +1383,18 @@ type ServerInterface interface {
 	// Compute EigenTrust scores, with execution statistics
 	// (POST /compute-with-stats)
 	ComputeWithStats(ctx echo.Context) error
+	// Delete local trust
+	// (DELETE /local-trust/{id})
+	DeleteLocalTrust(ctx echo.Context, id LocalTrustIdParam) error
+	// Retrieve local trust
+	// (GET /local-trust/{id})
+	GetLocalTrust(ctx echo.Context, id LocalTrustIdParam) error
+	// Check for existence of local trust
+	// (HEAD /local-trust/{id})
+	HeadLocalTrust(ctx echo.Context, id LocalTrustIdParam) error
+	// Update local trust
+	// (PUT /local-trust/{id})
+	UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam, params UpdateLocalTrustParams) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
@@ -816,6 +1417,79 @@ func (w *ServerInterfaceWrapper) ComputeWithStats(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshalled arguments
 	err = w.Handler.ComputeWithStats(ctx)
+	return err
+}
+
+// DeleteLocalTrust converts echo context to params.
+func (w *ServerInterfaceWrapper) DeleteLocalTrust(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id LocalTrustIdParam
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "id", runtime.ParamLocationPath, ctx.Param("id"), &id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshalled arguments
+	err = w.Handler.DeleteLocalTrust(ctx, id)
+	return err
+}
+
+// GetLocalTrust converts echo context to params.
+func (w *ServerInterfaceWrapper) GetLocalTrust(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id LocalTrustIdParam
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "id", runtime.ParamLocationPath, ctx.Param("id"), &id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshalled arguments
+	err = w.Handler.GetLocalTrust(ctx, id)
+	return err
+}
+
+// HeadLocalTrust converts echo context to params.
+func (w *ServerInterfaceWrapper) HeadLocalTrust(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id LocalTrustIdParam
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "id", runtime.ParamLocationPath, ctx.Param("id"), &id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshalled arguments
+	err = w.Handler.HeadLocalTrust(ctx, id)
+	return err
+}
+
+// UpdateLocalTrust converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateLocalTrust(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id LocalTrustIdParam
+
+	err = runtime.BindStyledParameterWithLocation("simple", false, "id", runtime.ParamLocationPath, ctx.Param("id"), &id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateLocalTrustParams
+	// ------------- Optional query parameter "merge" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "merge", ctx.QueryParams(), &params.Merge)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter merge: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshalled arguments
+	err = w.Handler.UpdateLocalTrust(ctx, id, params)
 	return err
 }
 
@@ -849,6 +1523,10 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 	router.POST(baseURL+"/compute", wrapper.Compute)
 	router.POST(baseURL+"/compute-with-stats", wrapper.ComputeWithStats)
+	router.DELETE(baseURL+"/local-trust/:id", wrapper.DeleteLocalTrust)
+	router.GET(baseURL+"/local-trust/:id", wrapper.GetLocalTrust)
+	router.HEAD(baseURL+"/local-trust/:id", wrapper.HeadLocalTrust)
+	router.PUT(baseURL+"/local-trust/:id", wrapper.UpdateLocalTrust)
 
 }
 
@@ -921,6 +1599,123 @@ func (response ComputeWithStats400JSONResponse) VisitComputeWithStatsResponse(w 
 	return json.NewEncoder(w).Encode(response)
 }
 
+type DeleteLocalTrustRequestObject struct {
+	Id LocalTrustIdParam `json:"id,omitempty"`
+}
+
+type DeleteLocalTrustResponseObject interface {
+	VisitDeleteLocalTrustResponse(w http.ResponseWriter) error
+}
+
+type DeleteLocalTrust204Response struct {
+}
+
+func (response DeleteLocalTrust204Response) VisitDeleteLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteLocalTrust400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response DeleteLocalTrust400JSONResponse) VisitDeleteLocalTrustResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteLocalTrust404Response struct {
+}
+
+func (response DeleteLocalTrust404Response) VisitDeleteLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetLocalTrustRequestObject struct {
+	Id LocalTrustIdParam `json:"id,omitempty"`
+}
+
+type GetLocalTrustResponseObject interface {
+	VisitGetLocalTrustResponse(w http.ResponseWriter) error
+}
+
+type GetLocalTrust200JSONResponse InlineLocalTrust
+
+func (response GetLocalTrust200JSONResponse) VisitGetLocalTrustResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetLocalTrust404Response struct {
+}
+
+func (response GetLocalTrust404Response) VisitGetLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type HeadLocalTrustRequestObject struct {
+	Id LocalTrustIdParam `json:"id,omitempty"`
+}
+
+type HeadLocalTrustResponseObject interface {
+	VisitHeadLocalTrustResponse(w http.ResponseWriter) error
+}
+
+type HeadLocalTrust204Response struct {
+}
+
+func (response HeadLocalTrust204Response) VisitHeadLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type HeadLocalTrust404Response struct {
+}
+
+func (response HeadLocalTrust404Response) VisitHeadLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type UpdateLocalTrustRequestObject struct {
+	Id     LocalTrustIdParam `json:"id,omitempty"`
+	Params UpdateLocalTrustParams
+	Body   *UpdateLocalTrustJSONRequestBody
+}
+
+type UpdateLocalTrustResponseObject interface {
+	VisitUpdateLocalTrustResponse(w http.ResponseWriter) error
+}
+
+type UpdateLocalTrust200Response struct {
+}
+
+func (response UpdateLocalTrust200Response) VisitUpdateLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type UpdateLocalTrust201Response struct {
+}
+
+func (response UpdateLocalTrust201Response) VisitUpdateLocalTrustResponse(w http.ResponseWriter) error {
+	w.WriteHeader(201)
+	return nil
+}
+
+type UpdateLocalTrust400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response UpdateLocalTrust400JSONResponse) VisitUpdateLocalTrustResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Compute EigenTrust scores
@@ -929,6 +1724,18 @@ type StrictServerInterface interface {
 	// Compute EigenTrust scores, with execution statistics
 	// (POST /compute-with-stats)
 	ComputeWithStats(ctx context.Context, request ComputeWithStatsRequestObject) (ComputeWithStatsResponseObject, error)
+	// Delete local trust
+	// (DELETE /local-trust/{id})
+	DeleteLocalTrust(ctx context.Context, request DeleteLocalTrustRequestObject) (DeleteLocalTrustResponseObject, error)
+	// Retrieve local trust
+	// (GET /local-trust/{id})
+	GetLocalTrust(ctx context.Context, request GetLocalTrustRequestObject) (GetLocalTrustResponseObject, error)
+	// Check for existence of local trust
+	// (HEAD /local-trust/{id})
+	HeadLocalTrust(ctx context.Context, request HeadLocalTrustRequestObject) (HeadLocalTrustResponseObject, error)
+	// Update local trust
+	// (PUT /local-trust/{id})
+	UpdateLocalTrust(ctx context.Context, request UpdateLocalTrustRequestObject) (UpdateLocalTrustResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx echo.Context, args interface{}) (interface{}, error)
@@ -1002,71 +1809,188 @@ func (sh *strictHandler) ComputeWithStats(ctx echo.Context) error {
 	return nil
 }
 
+// DeleteLocalTrust operation middleware
+func (sh *strictHandler) DeleteLocalTrust(ctx echo.Context, id LocalTrustIdParam) error {
+	var request DeleteLocalTrustRequestObject
+
+	request.Id = id
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteLocalTrust(ctx.Request().Context(), request.(DeleteLocalTrustRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteLocalTrust")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(DeleteLocalTrustResponseObject); ok {
+		return validResponse.VisitDeleteLocalTrustResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("Unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetLocalTrust operation middleware
+func (sh *strictHandler) GetLocalTrust(ctx echo.Context, id LocalTrustIdParam) error {
+	var request GetLocalTrustRequestObject
+
+	request.Id = id
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetLocalTrust(ctx.Request().Context(), request.(GetLocalTrustRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetLocalTrust")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetLocalTrustResponseObject); ok {
+		return validResponse.VisitGetLocalTrustResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("Unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// HeadLocalTrust operation middleware
+func (sh *strictHandler) HeadLocalTrust(ctx echo.Context, id LocalTrustIdParam) error {
+	var request HeadLocalTrustRequestObject
+
+	request.Id = id
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.HeadLocalTrust(ctx.Request().Context(), request.(HeadLocalTrustRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "HeadLocalTrust")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(HeadLocalTrustResponseObject); ok {
+		return validResponse.VisitHeadLocalTrustResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("Unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// UpdateLocalTrust operation middleware
+func (sh *strictHandler) UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam, params UpdateLocalTrustParams) error {
+	var request UpdateLocalTrustRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body UpdateLocalTrustJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateLocalTrust(ctx.Request().Context(), request.(UpdateLocalTrustRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateLocalTrust")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(UpdateLocalTrustResponseObject); ok {
+		return validResponse.VisitUpdateLocalTrustResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("Unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"AP//zyBHS54yAAA=",
+	"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",
+	"p82lwf3H+/8PAAD//41zFYmWPQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

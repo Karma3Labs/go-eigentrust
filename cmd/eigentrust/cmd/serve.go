@@ -29,9 +29,9 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server := basic.StrictServerImpl{Logger: logger}
+			server := basic.NewStrictServerImpl(logger)
 			basic.RegisterHandlersWithBaseURL(e,
-				basic.NewStrictHandler(&server, nil), "/basic/v1")
+				basic.NewStrictHandler(server, nil), "/basic/v1")
 			var err error
 			if listenAddress == "" {
 				port := 80

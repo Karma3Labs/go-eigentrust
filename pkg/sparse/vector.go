@@ -5,6 +5,8 @@ import (
 	"math"
 	"sort"
 	"sync"
+
+	"golang.org/x/exp/constraints"
 )
 
 // Vector is a sparse vector.
@@ -63,7 +65,15 @@ func (v *Vector) Sum() float64 {
 	return summer.Sum()
 }
 
-func max(a, b int) int {
+func min[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
+}
+
+func max[T constraints.Ordered](a, b T) T {
 	if a > b {
 		return a
 	} else {
