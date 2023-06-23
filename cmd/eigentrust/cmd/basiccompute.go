@@ -138,6 +138,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	if err = ref.FromInlineLocalTrust(inline); err != nil {
 		return errors.Wrap(err, "cannot wrap inline local trust")
 	}
+	ref.Scheme = "inline"
 	return nil
 }
 
@@ -235,6 +236,7 @@ func loadInlineTrustVectorCsv(
 	if err != io.EOF {
 		return errors.Wrapf(err, "cannot read trust vector CSV %#v", filename)
 	}
+	inline.Scheme = "inline"
 	if err = ref.FromInlineTrustVector(inline); err != nil {
 		return errors.Wrap(err, "cannot wrap inline trust vector")
 	}

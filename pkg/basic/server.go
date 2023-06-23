@@ -344,7 +344,7 @@ func (server *StrictServerImpl) loadLocalTrust(
 		}
 		return server.loadStoredLocalTrust(&stored)
 	default:
-		return nil, errors.New("unknown local trust ref type")
+		return nil, errors.Errorf("unknown local trust ref type %#v", ref.Scheme)
 	}
 }
 
