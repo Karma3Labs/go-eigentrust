@@ -35,6 +35,7 @@ var (
 	numLeaders            int
 	outputFilename        string
 	flatTailStatsFilename string
+	maxIterations         int
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -314,6 +315,9 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	}
 	requestBody.FlatTail = &flatTail
 	requestBody.NumLeaders = &numLeaders
+	if maxIterations > 0 {
+		requestBody.MaxIterations = &maxIterations
+	}
 	resp, err := client.ComputeWithStatsWithResponse(ctx, requestBody)
 	if err != nil {
 		logger.Err(err).Msg("request failed")
@@ -379,4 +383,6 @@ for flat-tail algorithm and stats.
 		"",
 		`Flat tail stats output file name.
 "" (default) suppresses output; "-" uses standard output`)
+	basicComputeCmd.Flags().IntVar(&maxIterations, "max-iterations", 0,
+		`Maximum number of iterations. 0 (default) means unlimited`)
 }
