@@ -29,6 +29,7 @@ var (
 	}
 	localTrustURI         string
 	preTrustURI           string
+	initialTrustURI       string
 	alpha                 float64
 	epsilon               float64
 	flatTail              int
@@ -295,9 +296,10 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		epsilonP = nil
 	}
 	requestBody := basic.ComputeWithStatsJSONRequestBody{
-		Alpha:    &alpha,
-		Epsilon:  epsilonP,
-		PreTrust: nil,
+		Alpha:        &alpha,
+		Epsilon:      epsilonP,
+		PreTrust:     nil,
+		InitialTrust: nil,
 	}
 	err = localTrustURIToRef(localTrustURI, &requestBody.LocalTrust)
 	if err != nil {
@@ -312,6 +314,15 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 			return
 		}
 		requestBody.PreTrust = &preTrustRef
+	}
+	if initialTrustURI != "" {
+		var initialTrustRef basic.TrustVectorRef
+		err = trustVectorURIToRef(initialTrustURI, &initialTrustRef)
+		if err != nil {
+			logger.Err(err).Msg("cannot parse/load initial trust reference")
+			return
+		}
+		requestBody.InitialTrust = &initialTrustRef
 	}
 	requestBody.FlatTail = &flatTail
 	requestBody.NumLeaders = &numLeaders
@@ -364,6 +375,11 @@ schemaless URIs are assumed to be file URIs.`)
 		`Pre-trust reference URI;
 file URIs are parsed and transmitted as inline.
 If not given, server uses uniform trust vector by default.`)
+	basicComputeCmd.Flags().StringVarP(&initialTrustURI, "initial-trust", "i",
+		"",
+		`Initial trust reference URI;
+file URIs are parsed and transmitted as inline.
+If not given, server uses pre-trust vector by default.`)
 	basicComputeCmd.Flags().Float64VarP(&alpha, "alpha", "a", 0.5,
 		`Alpha value, between 0.0 and 1.0 inclusive.
 Higher value biases the computation toward pre-trust.`)
