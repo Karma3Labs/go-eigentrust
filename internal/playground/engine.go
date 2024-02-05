@@ -155,15 +155,24 @@ func calculate(gc *gin.Context) error {
 	localTrustDensity := float64(numLocalTrusts) / float64(preTrust.Dim) / float64(preTrust.Dim)
 
 	basic.CanonicalizeTrustVector(preTrust)
+	discounts, err := basic.ExtractDistrust(localTrust)
+	if err != nil {
+		return errors.Wrap(err, "cannot extract discounts")
+	}
 	err = basic.CanonicalizeLocalTrust(localTrust, preTrust)
 	if err != nil {
 		return errors.Wrap(err, "cannot canonicalize local trust")
+	}
+	err = basic.CanonicalizeLocalTrust(discounts, nil)
+	if err != nil {
+		return errors.Wrap(err, "cannot canonicalize discounts")
 	}
 	trustScores, err := basic.Compute(gc.Request.Context(),
 		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute EigenTrust scores")
 	}
+	basic.DiscountTrustVector(trustScores, discounts)
 
 	getPeerName := func(i int) string {
 		if hasPeerNames {
