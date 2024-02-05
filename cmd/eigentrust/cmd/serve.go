@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
-	"k3l.io/go-eigentrust/pkg/basic/server"
+	oapiserver "k3l.io/go-eigentrust/pkg/basic/server/oapi"
 )
 
 var (
@@ -30,7 +30,7 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server := server.NewOAPIStrictServerImpl(logger)
+			server := oapiserver.NewStrictServerImpl(logger)
 			openapi.RegisterHandlersWithBaseURL(e,
 				openapi.NewStrictHandler(server, nil), "/basic/v1")
 			var err error
