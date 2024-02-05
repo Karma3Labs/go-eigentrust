@@ -118,6 +118,12 @@ func (svr *TrustMatrixServer) Update(
 				cols = j + 1
 			}
 		}
+		switch {
+		case rows < cols:
+			rows = cols
+		case cols < rows:
+			cols = rows
+		}
 		c2 := sparse.NewCSRMatrix(rows, cols, entries, true)
 		c.Merge(&c2.CSMatrix)
 		if e := c.Mmap(ctx); e != nil {
