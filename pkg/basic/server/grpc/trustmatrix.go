@@ -23,6 +23,18 @@ func NewTrustMatrixServer(m *server.NamedTrustMatrices) *TrustMatrixServer {
 	return &TrustMatrixServer{m: m}
 }
 
+func (svr *TrustMatrixServer) Create(
+	ctx context.Context,
+	request *trustmatrixpb.CreateRequest,
+) (response *trustmatrixpb.CreateResponse, err error) {
+	id, err := svr.m.New(ctx)
+	if err != nil {
+		return
+	}
+	response = &trustmatrixpb.CreateResponse{Id: id}
+	return
+}
+
 func (svr *TrustMatrixServer) Get(
 	request *trustmatrixpb.GetRequest,
 	server trustmatrixpb.Service_GetServer,
@@ -104,11 +116,12 @@ func (svr *TrustMatrixServer) Update(
 				cols = j + 1
 			}
 		}
-		c2 := sparse.NewCSRMatrix(rows, cols, entries)
+		c2 := sparse.NewCSRMatrix(rows, cols, entries, true)
 		c.Merge(&c2.CSMatrix)
 		if e := c.Mmap(ctx); e != nil {
 			zerolog.Ctx(ctx).Err(e).Msg("cannot mmap")
 		}
+		timestamp.Set(updateTimestamp)
 		return nil
 	})
 	if err != nil {

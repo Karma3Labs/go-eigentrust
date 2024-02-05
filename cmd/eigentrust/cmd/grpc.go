@@ -73,6 +73,7 @@ var (
 			matrixServer := grpcserver.NewTrustMatrixServer(&core.StoredTrustMatrices)
 			vectorServer := grpcserver.NewTrustVectorServer(&core.StoredTrustVectors)
 			computeServer := grpcserver.NewGrpcServer(core)
+
 			svr := grpc.NewServer(opts...)
 			computepb.RegisterServiceServer(svr, computeServer)
 			trustmatrixpb.RegisterServiceServer(svr, matrixServer)
