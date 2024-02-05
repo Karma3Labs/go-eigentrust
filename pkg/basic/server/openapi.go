@@ -1,62 +1,46 @@
-package basic
+package server
 
 import "C"
+
 import (
 	"context"
-	"fmt"
-	"net/http"
+	"math/big"
 	"runtime"
-	"sync"
 
 	"github.com/mohae/deepcopy"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
+	"k3l.io/go-eigentrust/pkg/basic"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
-type StrictServerImpl struct {
-	logger              zerolog.Logger
-	storedLocalTrust    map[openapi.LocalTrustId]*sparse.Matrix
-	storedLocalTrustMtx sync.Mutex
+type OAPIStrictServerImpl struct {
+	core *Core
 }
 
-func NewStrictServerImpl(logger zerolog.Logger) *StrictServerImpl {
-	return &StrictServerImpl{
-		logger:           logger,
-		storedLocalTrust: make(map[openapi.LocalTrustId]*sparse.Matrix),
+func NewOAPIStrictServerImpl(logger zerolog.Logger) *OAPIStrictServerImpl {
+	return &OAPIStrictServerImpl{
+		core: NewCore(logger),
 	}
 }
 
-type HTTPError struct {
-	Code  int
-	Inner error
-}
-
-func (e HTTPError) Error() string {
-	statusText := http.StatusText(e.Code)
-	if statusText != "" {
-		statusText = " " + statusText
-	}
-	return fmt.Sprintf("HTTP %d%s: %s", e.Code, statusText, e.Inner.Error())
-}
-
-func (server *StrictServerImpl) compute(
+func (server *OAPIStrictServerImpl) compute(
 	ctx context.Context, localTrustRef *openapi.LocalTrustRef,
 	initialTrust *openapi.TrustVectorRef, preTrust *openapi.TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
 	maxIterations *int,
-) (tv openapi.TrustVectorRef, flatTailStats FlatTailStats, err error) {
-	logger := server.logger.With().
-		Str("func", "(*StrictServerImpl).Compute").
+) (tv openapi.TrustVectorRef, flatTailStats basic.FlatTailStats, err error) {
+	logger := server.core.logger.With().
+		Str("func", "(*OAPIStrictServerImpl).Compute").
 		Logger()
 	var (
 		c  *sparse.Matrix
 		p  *sparse.Vector
 		t0 *sparse.Vector
 	)
-	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
+	opts := []basic.ComputeOpt{basic.WithFlatTailStats(&flatTailStats)}
 	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
 		err = HTTPError{400, errors.Wrap(err, "cannot load local trust")}
 		return
@@ -108,7 +92,7 @@ func (server *StrictServerImpl) compute(
 			Int("dim", t0.Dim).
 			Int("nnz", t0.NNZ()).
 			Msg("initial trust loaded")
-		opts = append(opts, WithInitialTrust(t0))
+		opts = append(opts, basic.WithInitialTrust(t0))
 	}
 	if alpha == nil {
 		a := 0.5
@@ -129,40 +113,40 @@ func (server *StrictServerImpl) compute(
 		return
 	}
 	if flatTail != nil {
-		opts = append(opts, WithFlatTail(*flatTail))
+		opts = append(opts, basic.WithFlatTail(*flatTail))
 	}
 	if numLeaders != nil {
-		opts = append(opts, WithFlatTailNumLeaders(*numLeaders))
+		opts = append(opts, basic.WithFlatTailNumLeaders(*numLeaders))
 	}
 	if maxIterations != nil {
-		opts = append(opts, WithMaxIterations(*maxIterations))
+		opts = append(opts, basic.WithMaxIterations(*maxIterations))
 	}
-	CanonicalizeTrustVector(p)
+	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
-		CanonicalizeTrustVector(t0)
+		basic.CanonicalizeTrustVector(t0)
 	}
-	discounts, err := ExtractDistrust(c)
+	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
 		err = HTTPError{
 			400, errors.Wrapf(err, "cannot extract discounts"),
 		}
 		return
 	}
-	err = CanonicalizeLocalTrust(c, p)
+	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = HTTPError{
 			400, errors.Wrapf(err, "cannot canonicalize local trust"),
 		}
 		return
 	}
-	err = CanonicalizeLocalTrust(discounts, nil)
+	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = HTTPError{
 			400, errors.Wrapf(err, "cannot canonicalize discounts"),
 		}
 		return
 	}
-	t, err := Compute(ctx, c, p, *alpha, *epsilon, opts...)
+	t, err := basic.Compute(ctx, c, p, *alpha, *epsilon, opts...)
 	c = nil
 	p = nil
 	runtime.GC()
@@ -170,7 +154,7 @@ func (server *StrictServerImpl) compute(
 		err = errors.Wrapf(err, "cannot compute EigenTrust")
 		return
 	}
-	DiscountTrustVector(t, discounts)
+	basic.DiscountTrustVector(t, discounts)
 	var itv openapi.InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
 	itv.Size = t.Dim
@@ -185,10 +169,10 @@ func (server *StrictServerImpl) compute(
 	return tv, flatTailStats, nil
 }
 
-func (server *StrictServerImpl) Compute(
+func (server *OAPIStrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
-	ctx = server.logger.WithContext(ctx)
+	ctx = server.core.logger.WithContext(ctx)
 	tv, _, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
@@ -209,10 +193,10 @@ func (server *StrictServerImpl) Compute(
 	return openapi.Compute200JSONResponse(tv), nil
 }
 
-func (server *StrictServerImpl) ComputeWithStats(
+func (server *OAPIStrictServerImpl) ComputeWithStats(
 	ctx context.Context, request openapi.ComputeWithStatsRequestObject,
 ) (openapi.ComputeWithStatsResponseObject, error) {
-	ctx = server.logger.WithContext(ctx)
+	ctx = server.core.logger.WithContext(ctx)
 	tv, flatTailStats, err := server.compute(ctx,
 		&request.Body.LocalTrust,
 		request.Body.InitialTrust, request.Body.PreTrust,
@@ -239,7 +223,7 @@ func (server *StrictServerImpl) ComputeWithStats(
 	return resp, nil
 }
 
-func (server *StrictServerImpl) GetLocalTrust(
+func (server *OAPIStrictServerImpl) GetLocalTrust(
 	ctx context.Context, request openapi.GetLocalTrustRequestObject,
 ) (openapi.GetLocalTrustResponseObject, error) {
 	inline, err := server.getLocalTrust(ctx, request.Id)
@@ -255,52 +239,57 @@ func (server *StrictServerImpl) GetLocalTrust(
 	return openapi.GetLocalTrust200JSONResponse(*inline), nil
 }
 
-func (server *StrictServerImpl) getLocalTrust(
+func (server *OAPIStrictServerImpl) getLocalTrust(
 	_ context.Context, id openapi.LocalTrustId,
 ) (*openapi.InlineLocalTrust, error) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	c := server.storedLocalTrust[id]
-	if c == nil {
+	tm, ok := server.core.storedLocalTrust.Load(id)
+	if !ok {
 		return nil, HTTPError{Code: 404}
 	}
-	cDim, err := c.Dim()
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get dimension")
-	}
-	entries := make([]openapi.InlineLocalTrustEntry, 0, c.NNZ())
-	for i, row := range c.Entries {
-		for _, entry := range row {
-			entries = append(entries, openapi.InlineLocalTrustEntry{
-				I: i,
-				J: entry.Index,
-				V: entry.Value,
-			})
+	var (
+		result openapi.InlineLocalTrust
+		err    error
+	)
+	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
+		result.Size, err = c.Dim()
+		if err != nil {
+			err = errors.Wrapf(err, "cannot get dimension")
+			return
 		}
+		result.Entries = make([]openapi.InlineLocalTrustEntry, 0, c.NNZ())
+		for i, row := range c.Entries {
+			for _, entry := range row {
+				result.Entries = append(result.Entries,
+					openapi.InlineLocalTrustEntry{
+						I: i,
+						J: entry.Index,
+						V: entry.Value,
+					})
+			}
+		}
+	})
+	if err != nil {
+		return nil, err
 	}
-	return &openapi.InlineLocalTrust{
-		Entries: entries,
-		Size:    cDim,
-	}, nil
+	return &result, nil
 }
 
-func (server *StrictServerImpl) HeadLocalTrust(
+func (server *OAPIStrictServerImpl) HeadLocalTrust(
 	ctx context.Context, request openapi.HeadLocalTrustRequestObject,
 ) (openapi.HeadLocalTrustResponseObject, error) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	if server.storedLocalTrust[request.Id] == nil {
+	_, ok := server.core.storedLocalTrust.Load(request.Id)
+	if !ok {
 		return openapi.HeadLocalTrust404Response{}, nil
 	} else {
 		return openapi.HeadLocalTrust204Response{}, nil
 	}
 }
 
-func (server *StrictServerImpl) UpdateLocalTrust(
+func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 	ctx context.Context, request openapi.UpdateLocalTrustRequestObject,
 ) (openapi.UpdateLocalTrustResponseObject, error) {
-	logger := server.logger.With().
-		Str("func", "(*StrictServerImpl).UpdateLocalTrust").
+	logger := server.core.logger.With().
+		Str("func", "(*OAPIStrictServerImpl).UpdateLocalTrust").
 		Str("localTrustId", request.Id).
 		Logger()
 	c, err := server.loadLocalTrust(request.Body)
@@ -315,16 +304,21 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
-	var created bool
+	var (
+		tm      *TrustMatrix
+		created bool
+	)
 	if request.Params.Merge != nil && *request.Params.Merge {
-		c, created = server.mergeStoredLocalTrust(request.Id, c)
+		tm, created = server.core.storedLocalTrust.Merge(request.Id, c)
 	} else {
-		created = server.setStoredLocalTrust(request.Id, c)
+		tm, created = server.core.storedLocalTrust.Set(request.Id, c)
 	}
-	err = c.Mmap(ctx)
-	if err != nil {
-		logger.Err(err).Msg("cannot swap out local trust")
-	}
+	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
+		err = c.Mmap(ctx)
+		if err != nil {
+			logger.Err(err).Msg("cannot swap out local trust")
+		}
+	})
 	if created {
 		return openapi.UpdateLocalTrust201Response{}, nil
 	} else {
@@ -332,16 +326,17 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 	}
 }
 
-func (server *StrictServerImpl) DeleteLocalTrust(
+func (server *OAPIStrictServerImpl) DeleteLocalTrust(
 	ctx context.Context, request openapi.DeleteLocalTrustRequestObject,
 ) (openapi.DeleteLocalTrustResponseObject, error) {
-	if !server.deleteStoredLocalTrust(request.Id) {
+	_, deleted := server.core.storedLocalTrust.LoadAndDelete(request.Id)
+	if !deleted {
 		return openapi.DeleteLocalTrust404Response{}, nil
 	}
 	return openapi.DeleteLocalTrust204Response{}, nil
 }
 
-func (server *StrictServerImpl) loadLocalTrust(
+func (server *OAPIStrictServerImpl) loadLocalTrust(
 	ref *openapi.LocalTrustRef,
 ) (*sparse.Matrix, error) {
 	switch ref.Scheme {
@@ -365,7 +360,7 @@ func (server *StrictServerImpl) loadLocalTrust(
 	}
 }
 
-func (server *StrictServerImpl) loadInlineLocalTrust(
+func (server *OAPIStrictServerImpl) loadInlineLocalTrust(
 	inline *openapi.InlineLocalTrust,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
@@ -394,21 +389,22 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
-func (server *StrictServerImpl) loadStoredLocalTrust(
+func (server *OAPIStrictServerImpl) loadStoredLocalTrust(
 	stored *openapi.StoredLocalTrust,
-) (*sparse.Matrix, error) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	c, ok := server.storedLocalTrust[stored.Id]
-	if !ok {
-		return nil, HTTPError{400, errors.New("local trust not found")}
+) (c *sparse.Matrix, err error) {
+	tm0, ok := server.core.storedLocalTrust.Load(stored.Id)
+	if ok {
+		// Caller may modify returned c in-place (canonicalize, size-match)
+		// so return a disposable copy, preserving the original.
+		// This is slow: It takes ~3s to copy 16M nonzero entries.
+		// TODO(ek): Implement on-demand canonicalization and remove this.
+		tm0.LockAndRun(func(c0 *sparse.Matrix, timestamp *big.Int) {
+			c = deepcopy.Copy(c0).(*sparse.Matrix)
+		})
+	} else {
+		err = HTTPError{400, errors.New("local trust not found")}
 	}
-	// Returned c is modified in-place (canonicalized, size-matched)
-	// so return a disposable copy, preserving the original.
-	// This is slow: It takes ~3s to copy 16M nonzero entries.
-	// TODO(ek): Implement on-demand canonicalization and remove this.
-	c = deepcopy.Copy(c).(*sparse.Matrix)
-	return c, nil
+	return
 }
 
 func loadTrustVector(ref *openapi.TrustVectorRef) (*sparse.Vector, error) {
@@ -438,40 +434,4 @@ func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
 	inline.Size = 0
 	inline.Entries = nil
 	return sparse.NewVector(size, entries), nil
-}
-
-func (server *StrictServerImpl) setStoredLocalTrust(
-	id openapi.LocalTrustId, c *sparse.Matrix,
-) (created bool) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	_, ok := server.storedLocalTrust[id]
-	server.storedLocalTrust[id] = c
-	return !ok
-}
-
-func (server *StrictServerImpl) mergeStoredLocalTrust(
-	id openapi.LocalTrustId, c *sparse.Matrix,
-) (c2 *sparse.Matrix, created bool) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	c2, ok := server.storedLocalTrust[id]
-	if ok {
-		c2.Merge(&c.CSMatrix)
-	} else {
-		server.storedLocalTrust[id] = c
-	}
-	return c2, !ok
-}
-
-func (server *StrictServerImpl) deleteStoredLocalTrust(
-	id openapi.LocalTrustId,
-) (deleted bool) {
-	server.storedLocalTrustMtx.Lock()
-	defer server.storedLocalTrustMtx.Unlock()
-	if _, ok := server.storedLocalTrust[id]; ok {
-		delete(server.storedLocalTrust, id)
-		deleted = true
-	}
-	return
 }
