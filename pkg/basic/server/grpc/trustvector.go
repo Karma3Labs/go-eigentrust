@@ -100,6 +100,7 @@ func (svr *TrustVectorServer) Update(
 			}
 		}
 		v.Merge(sparse.NewVector(size, entries))
+		timestamp.Set(updateTimestamp)
 		return nil
 	})
 	if err != nil {
