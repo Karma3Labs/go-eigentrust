@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -79,6 +80,7 @@ var (
 			trustmatrixpb.RegisterServiceServer(svr, matrixServer)
 			trustvectorpb.RegisterServiceServer(svr, vectorServer)
 
+			zerolog.DefaultContextLogger = &logger
 			err = svr.Serve(listener)
 			if err != nil {
 				logger.Err(err).Msg("server did not start or shut down gracefully")

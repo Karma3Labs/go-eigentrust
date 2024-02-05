@@ -80,6 +80,8 @@ func (svr *TrustMatrixServer) Get(
 func (svr *TrustMatrixServer) Update(
 	ctx context.Context, request *trustmatrixpb.UpdateRequest,
 ) (response *trustmatrixpb.UpdateResponse, err error) {
+	logger := zerolog.Ctx(ctx)
+	logger.Info().Interface("request", request)
 	tm, ok := svr.m.Load(request.Header.GetId())
 	if !ok {
 		return nil, status.Error(codes.NotFound, "vector not found")
