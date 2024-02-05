@@ -8,7 +8,10 @@ type SyncMap[K, V any] struct {
 
 func (m *SyncMap[K, V]) Load(key K) (value V, ok bool) {
 	v, ok := m.mapping.Load(key)
-	return v.(V), ok
+	if ok {
+		value = v.(V)
+	}
+	return
 }
 
 func (m *SyncMap[K, V]) Store(key K, value V) {
@@ -22,7 +25,10 @@ func (m *SyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
 
 func (m *SyncMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
 	v, loaded := m.mapping.LoadAndDelete(key)
-	return v.(V), loaded
+	if loaded {
+		value = v.(V)
+	}
+	return
 }
 
 func (m *SyncMap[K, V]) Delete(key K) {
@@ -31,7 +37,10 @@ func (m *SyncMap[K, V]) Delete(key K) {
 
 func (m *SyncMap[K, V]) Swap(key K, value V) (previous V, loaded bool) {
 	v, loaded := m.mapping.Swap(key, value)
-	return v.(V), loaded
+	if loaded {
+		previous = v.(V)
+	}
+	return
 }
 
 func (m *SyncMap[K, V]) CompareAndSwap(key K, old, new V) bool {

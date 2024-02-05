@@ -403,7 +403,7 @@ func (svr *StrictServerImpl) loadInlineLocalTrust(
 	size := inline.Size
 	inline.Size = 0
 	inline.Entries = nil
-	return sparse.NewCSRMatrix(size, size, entries), nil
+	return sparse.NewCSRMatrix(size, size, entries, false), nil
 }
 
 func (svr *StrictServerImpl) loadStoredLocalTrust(

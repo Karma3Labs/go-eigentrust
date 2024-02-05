@@ -40,7 +40,7 @@ func NewTrustMatrixWithContents(c *sparse.Matrix) *TrustMatrix {
 }
 
 func NewTrustMatrix() *TrustMatrix {
-	return NewTrustMatrixWithContents(sparse.NewCSRMatrix(0, 0, nil))
+	return NewTrustMatrixWithContents(sparse.NewCSRMatrix(0, 0, nil, false))
 }
 
 func (m *TrustMatrix) LockAndRun(
