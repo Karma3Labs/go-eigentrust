@@ -22,11 +22,11 @@ func NewTrustVector() *TrustVector {
 }
 
 func (m *TrustVector) LockAndRun(
-	f func(vector *sparse.Vector, timestamp *big.Int),
-) {
+	f func(vector *sparse.Vector, timestamp *big.Int) error,
+) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	f(m.vector, &m.timestamp)
+	return f(m.vector, &m.timestamp)
 }
 
 type TrustMatrix struct {
@@ -44,9 +44,9 @@ func NewTrustMatrix() *TrustMatrix {
 }
 
 func (m *TrustMatrix) LockAndRun(
-	f func(matrix *sparse.Matrix, timestamp *big.Int),
-) {
+	f func(matrix *sparse.Matrix, timestamp *big.Int) error,
+) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	f(m.matrix, &m.timestamp)
+	return f(m.matrix, &m.timestamp)
 }
