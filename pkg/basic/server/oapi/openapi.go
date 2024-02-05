@@ -1,4 +1,4 @@
-package server
+package oapiserver
 
 import "C"
 
@@ -15,43 +15,42 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mohae/deepcopy"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
 	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/basic/server"
 	"k3l.io/go-eigentrust/pkg/sparse"
 	"k3l.io/go-eigentrust/pkg/util"
 )
 
-type OAPIStrictServerImpl struct {
-	core       *Core
+type StrictServerImpl struct {
+	core       *server.Core
 	UseFileURI bool
 }
 
-func NewOAPIStrictServerImpl(ctx context.Context) (
-	*OAPIStrictServerImpl, error,
-) {
-	core, err := NewCore(ctx)
+func NewStrictServerImpl(
+	ctx context.Context,
+) (*StrictServerImpl, error) {
+	core, err := server.NewCore(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create server core: %w", err)
 	}
-	return &OAPIStrictServerImpl{
+	return &StrictServerImpl{
 		core:       core,
 		UseFileURI: false,
 	}, nil
 }
 
-func (server *OAPIStrictServerImpl) GetStatus(
+func (svr *StrictServerImpl) GetStatus(
 	context.Context, openapi.GetStatusRequestObject,
 ) (openapi.GetStatusResponseObject, error) {
 	return openapi.GetStatus200JSONResponse{
-		openapi.ServerReadyJSONResponse{Message: "OK"},
+		ServerReadyJSONResponse: openapi.ServerReadyJSONResponse{Message: "OK"},
 	}, nil
 }
 
-func (server *OAPIStrictServerImpl) compute(
+func (svr *StrictServerImpl) compute(
 	ctx context.Context, localTrustRef *openapi.TrustMatrixRef,
 	initialTrust *openapi.TrustVectorRef, preTrust *openapi.TrustVectorRef,
 	alpha *float64, epsilon *float64,
@@ -65,8 +64,10 @@ func (server *OAPIStrictServerImpl) compute(
 		t0 *sparse.Vector
 	)
 	opts := []basic.ComputeOpt{basic.WithFlatTailStats(&flatTailStats)}
-	if c, err = server.loadTrustMatrix(ctx, localTrustRef); err != nil {
-		err = HTTPError{400, fmt.Errorf("cannot load local trust: %w", err)}
+	if c, err = svr.loadTrustMatrix(ctx, localTrustRef); err != nil {
+		err = server.HTTPError{
+			Code: 400, Inner: fmt.Errorf("cannot load local trust: %w", err),
+		}
 		return
 	}
 	cDim, err := c.Dim()
@@ -80,8 +81,10 @@ func (server *OAPIStrictServerImpl) compute(
 	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
-	} else if p, err = server.loadTrustVector(ctx, preTrust); err != nil {
-		err = HTTPError{400, fmt.Errorf("cannot load pre-trust: %w", err)}
+	} else if p, err = svr.loadTrustVector(ctx, preTrust); err != nil {
+		err = server.HTTPError{
+			Code: 400, Inner: fmt.Errorf("cannot load pre-trust: %w", err),
+		}
 		return
 	} else {
 		// align dimensions
@@ -99,8 +102,10 @@ func (server *OAPIStrictServerImpl) compute(
 		Msg("pre-trust loaded")
 	if initialTrust == nil {
 		t0 = nil
-	} else if t0, err = server.loadTrustVector(ctx, initialTrust); err != nil {
-		err = HTTPError{400, fmt.Errorf("cannot load initial trust: %w", err)}
+	} else if t0, err = svr.loadTrustVector(ctx, initialTrust); err != nil {
+		err = server.HTTPError{
+			Code: 400, Inner: fmt.Errorf("cannot load initial trust: %w", err),
+		}
 		return
 	} else {
 		// align dimensions
@@ -122,8 +127,9 @@ func (server *OAPIStrictServerImpl) compute(
 		a := 0.5
 		alpha = &a
 	} else if *alpha < 0 || *alpha > 1 {
-		err = HTTPError{
-			400, fmt.Errorf("alpha=%f out of range [0..1]", *alpha),
+		err = server.HTTPError{
+			Code:  400,
+			Inner: fmt.Errorf("alpha=%f out of range [0..1]", *alpha),
 		}
 		return
 	}
@@ -131,8 +137,9 @@ func (server *OAPIStrictServerImpl) compute(
 		e := 1e-6 / float64(cDim)
 		epsilon = &e
 	} else if *epsilon <= 0 || *epsilon > 1 {
-		err = HTTPError{
-			400, fmt.Errorf("epsilon=%f out of range (0..1]", *epsilon),
+		err = server.HTTPError{
+			Code:  400,
+			Inner: fmt.Errorf("epsilon=%f out of range (0..1]", *epsilon),
 		}
 		return
 	}
@@ -157,22 +164,24 @@ func (server *OAPIStrictServerImpl) compute(
 	}
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
-		err = HTTPError{
-			400, fmt.Errorf("cannot extract discounts: %w", err),
+		err = server.HTTPError{
+			Code: 400, Inner: fmt.Errorf("cannot extract discounts: %w", err),
 		}
 		return
 	}
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
-		err = HTTPError{
-			400, fmt.Errorf("cannot canonicalize local trust: %w", err),
+		err = server.HTTPError{
+			Code:  400,
+			Inner: fmt.Errorf("cannot canonicalize local trust: %w", err),
 		}
 		return
 	}
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
-		err = HTTPError{
-			400, fmt.Errorf("cannot canonicalize discounts: %w", err),
+		err = server.HTTPError{
+			Code:  400,
+			Inner: fmt.Errorf("cannot canonicalize discounts: %w", err),
 		}
 		return
 	}
@@ -203,17 +212,17 @@ func (server *OAPIStrictServerImpl) compute(
 	return tv, flatTailStats, nil
 }
 
-func (server *OAPIStrictServerImpl) Compute(
+func (svr *StrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
 	req := request.Body
 
-	tv, _, err := server.compute(ctx,
+	tv, _, err := svr.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
 		req.FlatTail, req.NumLeaders,
 		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		var httpError HTTPError
+		var httpError server.HTTPError
 		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
@@ -225,19 +234,19 @@ func (server *OAPIStrictServerImpl) Compute(
 		return nil, err
 	}
 	resp := openapi.ComputeResponseOKJSONResponse(tv)
-	return openapi.Compute200JSONResponse{resp}, nil
+	return openapi.Compute200JSONResponse{ComputeResponseOKJSONResponse: resp}, nil
 }
 
-func (server *OAPIStrictServerImpl) ComputeWithStats(
+func (svr *StrictServerImpl) ComputeWithStats(
 	ctx context.Context, request openapi.ComputeWithStatsRequestObject,
 ) (openapi.ComputeWithStatsResponseObject, error) {
 	req := request.Body
-	tv, flatTailStats, err := server.compute(ctx,
+	tv, flatTailStats, err := svr.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
 		req.FlatTail, req.NumLeaders,
 		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		var httpError HTTPError
+		var httpError server.HTTPError
 		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
@@ -257,12 +266,12 @@ func (server *OAPIStrictServerImpl) ComputeWithStats(
 	return resp, nil
 }
 
-func (server *OAPIStrictServerImpl) GetLocalTrust(
+func (svr *StrictServerImpl) GetLocalTrust(
 	ctx context.Context, request openapi.GetLocalTrustRequestObject,
 ) (openapi.GetLocalTrustResponseObject, error) {
-	inline, err := server.getLocalTrust(ctx, request.Id)
+	inline, err := svr.getLocalTrust(ctx, request.Id)
 	if err != nil {
-		var httpError HTTPError
+		var httpError server.HTTPError
 		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 404:
@@ -272,15 +281,15 @@ func (server *OAPIStrictServerImpl) GetLocalTrust(
 		return nil, err
 	}
 	resp := openapi.LocalTrustGetResponseOKJSONResponse(*inline)
-	return openapi.GetLocalTrust200JSONResponse{resp}, nil
+	return openapi.GetLocalTrust200JSONResponse{LocalTrustGetResponseOKJSONResponse: resp}, nil
 }
 
-func (server *OAPIStrictServerImpl) getLocalTrust(
+func (svr *StrictServerImpl) getLocalTrust(
 	_ context.Context, id openapi.TrustCollectionId,
 ) (*openapi.InlineTrustMatrix, error) {
-	tm, ok := server.core.StoredTrustMatrices.Load(id)
+	tm, ok := svr.core.StoredTrustMatrices.Load(id)
 	if !ok {
-		return nil, HTTPError{Code: 404}
+		return nil, server.HTTPError{Code: 404}
 	}
 	var (
 		result openapi.InlineTrustMatrix
@@ -310,10 +319,10 @@ func (server *OAPIStrictServerImpl) getLocalTrust(
 	return &result, nil
 }
 
-func (server *OAPIStrictServerImpl) HeadLocalTrust(
-	ctx context.Context, request openapi.HeadLocalTrustRequestObject,
+func (svr *StrictServerImpl) HeadLocalTrust(
+	_ context.Context, request openapi.HeadLocalTrustRequestObject,
 ) (openapi.HeadLocalTrustResponseObject, error) {
-	_, ok := server.core.StoredTrustMatrices.Load(request.Id)
+	_, ok := svr.core.StoredTrustMatrices.Load(request.Id)
 	if !ok {
 		return openapi.HeadLocalTrust404Response{}, nil
 	} else {
@@ -321,14 +330,14 @@ func (server *OAPIStrictServerImpl) HeadLocalTrust(
 	}
 }
 
-func (server *OAPIStrictServerImpl) UpdateLocalTrust(
+func (svr *StrictServerImpl) UpdateLocalTrust(
 	ctx context.Context, request openapi.UpdateLocalTrustRequestObject,
 ) (openapi.UpdateLocalTrustResponseObject, error) {
 	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
-	c, err := server.loadTrustMatrix(ctx, request.Body)
+	c, err := svr.loadTrustMatrix(ctx, request.Body)
 	if err != nil {
-		return nil, HTTPError{
-			400, fmt.Errorf("cannot load local trust: %w", err),
+		return nil, server.HTTPError{
+			Code: 400, Inner: fmt.Errorf("cannot load local trust: %w", err),
 		}
 	}
 	cDim, err := c.Dim()
@@ -340,13 +349,13 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
 	var (
-		tm      *TrustMatrix
+		tm      *server.TrustMatrix
 		created bool
 	)
 	if request.Params.Merge != nil && *request.Params.Merge {
-		tm, created = server.core.StoredTrustMatrices.Merge(request.Id, c)
+		tm, created = svr.core.StoredTrustMatrices.Merge(request.Id, c)
 	} else {
-		tm, created = server.core.StoredTrustMatrices.Set(request.Id, c)
+		tm, created = svr.core.StoredTrustMatrices.Set(request.Id, c)
 	}
 	_ = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
 		err1 := c.Mmap(ctx)
@@ -362,17 +371,17 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 	}
 }
 
-func (server *OAPIStrictServerImpl) DeleteLocalTrust(
-	ctx context.Context, request openapi.DeleteLocalTrustRequestObject,
+func (svr *StrictServerImpl) DeleteLocalTrust(
+	_ context.Context, request openapi.DeleteLocalTrustRequestObject,
 ) (openapi.DeleteLocalTrustResponseObject, error) {
-	_, deleted := server.core.StoredTrustMatrices.LoadAndDelete(request.Id)
+	_, deleted := svr.core.StoredTrustMatrices.LoadAndDelete(request.Id)
 	if !deleted {
 		return openapi.DeleteLocalTrust404Response{}, nil
 	}
 	return openapi.DeleteLocalTrust204Response{}, nil
 }
 
-func (server *OAPIStrictServerImpl) loadTrustMatrix(
+func (svr *StrictServerImpl) loadTrustMatrix(
 	ctx context.Context,
 	ref *openapi.TrustMatrixRef,
 ) (*sparse.Matrix, error) {
@@ -382,25 +391,25 @@ func (server *OAPIStrictServerImpl) loadTrustMatrix(
 		if err != nil {
 			return nil, err
 		}
-		return server.loadInlineTrustMatrix(&inline)
+		return svr.loadInlineTrustMatrix(&inline)
 	case openapi.TrustMatrixRefSchemeStored:
 		stored, err := ref.AsStoredTrustMatrix()
 		if err != nil {
 			return nil, err
 		}
-		return server.loadStoredTrustMatrix(&stored)
+		return svr.loadStoredTrustMatrix(&stored)
 	case openapi.TrustMatrixRefSchemeObjectstorage:
 		objectStorage, err := ref.AsObjectStorageTrustMatrix()
 		if err != nil {
 			return nil, err
 		}
-		return server.loadObjectStorageTrustMatrix(ctx, &objectStorage)
+		return svr.loadObjectStorageTrustMatrix(ctx, &objectStorage)
 	default:
 		return nil, fmt.Errorf("unknown local trust ref type %#v", ref.Scheme)
 	}
 }
 
-func (server *OAPIStrictServerImpl) loadInlineTrustMatrix(
+func (svr *StrictServerImpl) loadInlineTrustMatrix(
 	inline *openapi.InlineTrustMatrix,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
@@ -429,10 +438,10 @@ func (server *OAPIStrictServerImpl) loadInlineTrustMatrix(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
-func (server *OAPIStrictServerImpl) loadStoredTrustMatrix(
+func (svr *StrictServerImpl) loadStoredTrustMatrix(
 	stored *openapi.StoredTrustMatrix,
 ) (c *sparse.Matrix, err error) {
-	tm0, ok := server.core.StoredTrustMatrices.Load(stored.Id)
+	tm0, ok := svr.core.StoredTrustMatrices.Load(stored.Id)
 	if ok {
 		// Caller may modify returned c in-place (canonicalize, size-match)
 		// so return a disposable copy, preserving the original.
@@ -443,12 +452,14 @@ func (server *OAPIStrictServerImpl) loadStoredTrustMatrix(
 			return nil
 		})
 	} else {
-		err = HTTPError{400, errors.New("trust matrix not found")}
+		err = server.HTTPError{
+			Code: 400, Inner: errors.New("trust matrix not found"),
+		}
 	}
 	return
 }
 
-func (server *OAPIStrictServerImpl) loadObjectStorageTrustMatrix(
+func (svr *StrictServerImpl) loadObjectStorageTrustMatrix(
 	ctx context.Context, ref *openapi.ObjectStorageTrustMatrix,
 ) (*sparse.Matrix, error) {
 	u, err := url.Parse(ref.Url)
@@ -459,30 +470,30 @@ func (server *OAPIStrictServerImpl) loadObjectStorageTrustMatrix(
 	case "s3":
 		bucket := u.Host
 		path := strings.TrimPrefix(u.Path, "/")
-		return server.loadS3TrustMatrix(ctx, bucket, path)
+		return svr.loadS3TrustMatrix(ctx, bucket, path)
 	case "file":
-		if !server.UseFileURI {
+		if !svr.UseFileURI {
 			return nil, fmt.Errorf("file: URI is disabled in this server")
 		}
-		return server.loadFileTrustMatrix(u.Path)
+		return svr.loadFileTrustMatrix(u.Path)
 	default:
 		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
 			u.Scheme)
 	}
 }
 
-func (server *OAPIStrictServerImpl) loadS3TrustMatrix(
+func (svr *StrictServerImpl) loadS3TrustMatrix(
 	ctx context.Context, bucket string, key string,
 ) (*sparse.Matrix, error) {
-	res, err := server.core.loadS3Object(ctx, bucket, key)
+	res, err := svr.core.LoadS3Object(ctx, bucket, key)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load trust matrix from S3: %w", err)
 	}
 	defer util.Close(res.Body)
-	return server.loadCsvTrustMatrix(csv.NewReader(res.Body))
+	return svr.loadCsvTrustMatrix(csv.NewReader(res.Body))
 }
 
-func (server *OAPIStrictServerImpl) loadFileTrustMatrix(
+func (svr *StrictServerImpl) loadFileTrustMatrix(
 	path string,
 ) (*sparse.Matrix, error) {
 	f, err := os.Open(path)
@@ -490,10 +501,10 @@ func (server *OAPIStrictServerImpl) loadFileTrustMatrix(
 		return nil, err
 	}
 	defer util.Close(f)
-	return server.loadCsvTrustMatrix(csv.NewReader(f))
+	return svr.loadCsvTrustMatrix(csv.NewReader(f))
 }
 
-func (server *OAPIStrictServerImpl) loadCsvTrustMatrix(
+func (svr *StrictServerImpl) loadCsvTrustMatrix(
 	r *csv.Reader,
 ) (*sparse.Matrix, error) {
 	header, err := r.Read()
@@ -532,7 +543,7 @@ func (server *OAPIStrictServerImpl) loadCsvTrustMatrix(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
-func (server *OAPIStrictServerImpl) loadTrustVector(
+func (svr *StrictServerImpl) loadTrustVector(
 	ctx context.Context,
 	ref *openapi.TrustVectorRef,
 ) (*sparse.Vector, error) {
@@ -548,7 +559,7 @@ func (server *OAPIStrictServerImpl) loadTrustVector(
 		if err != nil {
 			return nil, err
 		}
-		return server.loadObjectStorageTrustVector(ctx, &objectStorage)
+		return svr.loadObjectStorageTrustVector(ctx, &objectStorage)
 	default:
 		return nil, fmt.Errorf("unknown trust vector ref type %#v", ref.Scheme)
 	}
@@ -576,7 +587,7 @@ func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
 	return sparse.NewVector(size, entries), nil
 }
 
-func (server *OAPIStrictServerImpl) loadObjectStorageTrustVector(
+func (svr *StrictServerImpl) loadObjectStorageTrustVector(
 	ctx context.Context, ref *openapi.ObjectStorageTrustVector,
 ) (*sparse.Vector, error) {
 	u, err := url.Parse(ref.Url)
@@ -587,32 +598,32 @@ func (server *OAPIStrictServerImpl) loadObjectStorageTrustVector(
 	case "s3":
 		bucket := u.Host
 		path := strings.TrimPrefix(u.Path, "/")
-		return server.loadS3TrustVector(ctx, bucket, path)
+		return svr.loadS3TrustVector(ctx, bucket, path)
 	case "file":
-		if !server.UseFileURI {
+		if !svr.UseFileURI {
 			return nil, fmt.Errorf("file: URI is disabled in this server")
 		}
-		return server.loadFileTrustVector(u.Path)
+		return svr.loadFileTrustVector(u.Path)
 	default:
 		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
 			u.Scheme)
 	}
 }
 
-func (server *OAPIStrictServerImpl) loadS3TrustVector(
+func (svr *StrictServerImpl) loadS3TrustVector(
 	ctx context.Context, bucket string, key string,
 ) (*sparse.Vector, error) {
-	res, err := server.core.loadS3Object(ctx, bucket, key)
+	res, err := svr.core.LoadS3Object(ctx, bucket, key)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load trust vector from S3: %w", err)
 	}
 	defer util.Close(res.Body)
 	r := csv.NewReader(res.Body)
-	return server.loadCsvTrustVector(r)
+	return svr.loadCsvTrustVector(r)
 
 }
 
-func (server *OAPIStrictServerImpl) loadFileTrustVector(
+func (svr *StrictServerImpl) loadFileTrustVector(
 	path string,
 ) (*sparse.Vector, error) {
 	f, err := os.Open(path)
@@ -620,10 +631,10 @@ func (server *OAPIStrictServerImpl) loadFileTrustVector(
 		return nil, err
 	}
 	defer util.Close(f)
-	return server.loadCsvTrustVector(csv.NewReader(f))
+	return svr.loadCsvTrustVector(csv.NewReader(f))
 }
 
-func (server *OAPIStrictServerImpl) loadCsvTrustVector(
+func (svr *StrictServerImpl) loadCsvTrustVector(
 	r *csv.Reader,
 ) (*sparse.Vector, error) {
 	header, err := r.Read()
@@ -653,26 +664,4 @@ func (server *OAPIStrictServerImpl) loadCsvTrustVector(
 		entries = append(entries, sparse.Entry{Index: i, Value: v})
 	}
 	return sparse.NewVector(size, entries), nil
-}
-
-func (server *Core) loadS3Object(
-	ctx context.Context, bucket string, key string,
-) (*s3.GetObjectOutput, error) {
-	client := s3.NewFromConfig(server.awsConfig)
-	region, err := manager.GetBucketRegion(ctx, client, bucket)
-	if err != nil {
-		return nil, fmt.Errorf("GetBucketRegion failed: %w", err)
-	}
-	awsConfig := server.awsConfig.Copy()
-	awsConfig.Region = region
-	client = s3.NewFromConfig(awsConfig)
-	req := s3.GetObjectInput{
-		Bucket: &bucket,
-		Key:    &key,
-	}
-	res, err := client.GetObject(ctx, &req)
-	if err != nil {
-		return nil, fmt.Errorf("GetObject failed: %w", err)
-	}
-	return res, nil
 }
