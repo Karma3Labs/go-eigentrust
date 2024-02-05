@@ -435,7 +435,7 @@ func (svr *StrictServerImpl) loadInlineTrustMatrix(
 	size := inline.Size
 	inline.Size = 0
 	inline.Entries = nil
-	return sparse.NewCSRMatrix(size, size, entries), nil
+	return sparse.NewCSRMatrix(size, size, entries, false), nil
 }
 
 func (svr *StrictServerImpl) loadStoredTrustMatrix(
@@ -540,7 +540,7 @@ func (svr *StrictServerImpl) loadCsvTrustMatrix(
 		}
 		entries = append(entries, sparse.CooEntry{Row: i, Column: j, Value: v})
 	}
-	return sparse.NewCSRMatrix(size, size, entries), nil
+	return sparse.NewCSRMatrix(size, size, entries, false), nil
 }
 
 func (svr *StrictServerImpl) loadTrustVector(
