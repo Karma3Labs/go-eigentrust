@@ -16,11 +16,14 @@ import (
 
 type TrustMatrixServer struct {
 	trustmatrixpb.UnimplementedServiceServer
-	m *server.NamedTrustMatrices
+	m      *server.NamedTrustMatrices
+	logger zerolog.Logger
 }
 
-func NewTrustMatrixServer(m *server.NamedTrustMatrices) *TrustMatrixServer {
-	return &TrustMatrixServer{m: m}
+func NewTrustMatrixServer(
+	m *server.NamedTrustMatrices, logger zerolog.Logger,
+) *TrustMatrixServer {
+	return &TrustMatrixServer{m: m, logger: logger}
 }
 
 func (svr *TrustMatrixServer) Create(
@@ -80,6 +83,7 @@ func (svr *TrustMatrixServer) Get(
 func (svr *TrustMatrixServer) Update(
 	ctx context.Context, request *trustmatrixpb.UpdateRequest,
 ) (response *trustmatrixpb.UpdateResponse, err error) {
+	svr.logger.Info().Interface("request", request)
 	tm, ok := svr.m.Load(request.Header.GetId())
 	if !ok {
 		return nil, status.Error(codes.NotFound, "vector not found")

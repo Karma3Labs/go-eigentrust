@@ -65,8 +65,10 @@ var (
 				opts = append(opts, grpc.Creds(creds))
 			}
 			core := server.NewCore(logger)
-			matrixServer := grpcserver.NewTrustMatrixServer(&core.StoredTrustMatrices)
-			vectorServer := grpcserver.NewTrustVectorServer(&core.StoredTrustVectors)
+			matrixServer := grpcserver.NewTrustMatrixServer(&core.StoredTrustMatrices,
+				logger)
+			vectorServer := grpcserver.NewTrustVectorServer(&core.StoredTrustVectors,
+				logger)
 			computeServer := grpcserver.NewGrpcServer(core)
 
 			svr := grpc.NewServer(opts...)

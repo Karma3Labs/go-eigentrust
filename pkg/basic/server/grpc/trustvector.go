@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	trustvectorpb "k3l.io/go-eigentrust/pkg/api/pb/trustvector"
@@ -15,11 +16,14 @@ import (
 
 type TrustVectorServer struct {
 	trustvectorpb.UnimplementedServiceServer
-	v *server.NamedTrustVectors
+	v      *server.NamedTrustVectors
+	logger zerolog.Logger
 }
 
-func NewTrustVectorServer(v *server.NamedTrustVectors) *TrustVectorServer {
-	return &TrustVectorServer{v: v}
+func NewTrustVectorServer(
+	v *server.NamedTrustVectors, logger zerolog.Logger,
+) *TrustVectorServer {
+	return &TrustVectorServer{v: v, logger: logger}
 }
 
 func (svr *TrustVectorServer) Create(
