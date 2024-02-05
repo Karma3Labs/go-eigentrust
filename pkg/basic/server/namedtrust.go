@@ -42,3 +42,39 @@ func (ntm *NamedTrustMatrices) Delete(id string) (deleted bool) {
 	_, deleted = ntm.LoadAndDelete(id)
 	return
 }
+
+type NamedTrustVectors struct {
+	util.SyncMap[string, *TrustVector]
+}
+
+// Set stores v into the stored local trust.
+// It takes ownership of v; caller must not use v anymore.
+func (ntv *NamedTrustVectors) Set(
+	id string, v *sparse.Vector,
+) (tv *TrustVector, created bool) {
+	tv = NewTrustVectorWithContents(v)
+	_, loaded := ntv.Swap(id, tv)
+	created = !loaded
+	return
+}
+
+// Merge merges v into the stored local trust.
+// It takes ownership of v; caller must not use v anymore.
+func (ntv *NamedTrustVectors) Merge(
+	id string, v *sparse.Vector,
+) (tv2 *TrustVector, created bool) {
+	tv1 := NewTrustVectorWithContents(v)
+	tv2, loaded := ntv.LoadOrStore(id, tv1)
+	if tv2 != tv1 {
+		tv2.LockAndRun(func(v2 *sparse.Vector, timestamp *big.Int) {
+			v2.Merge(v)
+		})
+		v.Reset()
+	}
+	return tv2, !loaded
+}
+
+func (ntv *NamedTrustVectors) Delete(id string) (deleted bool) {
+	_, deleted = ntv.LoadAndDelete(id)
+	return
+}

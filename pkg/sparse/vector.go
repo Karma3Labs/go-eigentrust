@@ -299,3 +299,20 @@ func (v *Vector) Norm2() float64 {
 	}
 	return math.Sqrt(summer.Sum())
 }
+
+// Merge merges the given vector (v2) into the receiver.
+//
+// If both v and v2 contain an entry at the same location, v2's entry wins.
+//
+// v2 is reset after merge.
+func (v *Vector) Merge(v2 *Vector) {
+	v.SetDim(max(v.Dim, v2.Dim)) // also resizes v.Entries
+	v.Entries = mergeSpan(v.Entries, v2.Entries)
+	v2.Reset()
+}
+
+// Reset resets the receiver to be empty (0x0).
+func (v *Vector) Reset() {
+	v.Dim = 0
+	v.Entries = nil
+}
