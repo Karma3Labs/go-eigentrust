@@ -27,13 +27,19 @@ func NewTrustVectorServer(
 }
 
 func (svr *TrustVectorServer) Create(
-	ctx context.Context, _ /*request*/ *trustvectorpb.CreateRequest,
-) (*trustvectorpb.CreateResponse, error) {
-	id, err := svr.v.New(ctx)
-	if err != nil {
-		return nil, err
+	ctx context.Context, request *trustvectorpb.CreateRequest,
+) (response *trustvectorpb.CreateResponse, err error) {
+	var id string
+	if request.Id == "" {
+		id, err = svr.v.New(ctx)
+	} else {
+		id = request.Id
+		err = svr.v.NewNamed(request.Id)
 	}
-	return &trustvectorpb.CreateResponse{Id: id}, nil
+	if err == nil {
+		response = &trustvectorpb.CreateResponse{Id: id}
+	}
+	return
 }
 
 func (svr *TrustVectorServer) Get(
