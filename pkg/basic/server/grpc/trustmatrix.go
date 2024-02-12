@@ -88,7 +88,7 @@ func (svr *TrustMatrixServer) Update(
 	logger.Info().Interface("request", request)
 	tm, ok := svr.m.Load(request.Header.GetId())
 	if !ok {
-		return nil, status.Error(codes.NotFound, "vector not found")
+		return nil, status.Error(codes.NotFound, "matrix not found")
 	}
 	err = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
 		updateTimestamp := Qwords2BigUint(request.Header.TimestampQwords)
@@ -147,7 +147,7 @@ func (svr *TrustMatrixServer) Flush(
 ) (*trustmatrixpb.FlushResponse, error) {
 	tm, ok := svr.m.Load(request.Id)
 	if !ok {
-		return nil, status.Error(codes.NotFound, "vector not found")
+		return nil, status.Error(codes.NotFound, "matrix not found")
 	}
 	_ = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
 		c.Reset()
