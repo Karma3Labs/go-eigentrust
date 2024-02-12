@@ -7,11 +7,12 @@
 package computepb
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	trustvector "k3l.io/go-eigentrust/pkg/api/pb/trustvector"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
