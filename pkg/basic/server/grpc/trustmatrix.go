@@ -24,14 +24,18 @@ func NewTrustMatrixServer(m *server.NamedTrustMatrices) *TrustMatrixServer {
 }
 
 func (svr *TrustMatrixServer) Create(
-	ctx context.Context,
-	request *trustmatrixpb.CreateRequest,
+	ctx context.Context, request *trustmatrixpb.CreateRequest,
 ) (response *trustmatrixpb.CreateResponse, err error) {
-	id, err := svr.m.New(ctx)
-	if err != nil {
-		return
+	var id string
+	if request.Id == "" {
+		id, err = svr.m.New(ctx)
+	} else {
+		id = request.Id
+		err = svr.m.NewNamed(request.Id)
 	}
-	response = &trustmatrixpb.CreateResponse{Id: id}
+	if err == nil {
+		response = &trustmatrixpb.CreateResponse{Id: id}
+	}
 	return
 }
 

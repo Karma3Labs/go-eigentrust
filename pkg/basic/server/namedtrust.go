@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -33,6 +34,14 @@ func (ntms *NamedTrustMatrices) New(ctx context.Context) (
 			return id, nil
 		}
 	}
+}
+
+// NewNamed creates and stores an empty vector under the given name.
+func (ntms *NamedTrustMatrices) NewNamed(id string) error {
+	if _, loaded := ntms.SyncMap.LoadOrStore(id, NewTrustMatrix()); loaded {
+		return fmt.Errorf("already have a trust matrix %q", id)
+	}
+	return nil
 }
 
 // Set stores c into the stored local trust.
@@ -87,6 +96,14 @@ func (ntvs *NamedTrustVectors) New(ctx context.Context) (id string, err error) {
 			return id, nil
 		}
 	}
+}
+
+// NewNamed creates and stores an empty vector under the given name.
+func (ntvs *NamedTrustVectors) NewNamed(id string) error {
+	if _, loaded := ntvs.SyncMap.LoadOrStore(id, NewTrustVector()); loaded {
+		return fmt.Errorf("already have a trust vector %q", id)
+	}
+	return nil
 }
 
 // Set stores v into the stored local trust.
