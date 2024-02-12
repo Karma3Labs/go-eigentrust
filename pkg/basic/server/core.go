@@ -12,6 +12,7 @@ type ComputeParams struct {
 	alpha         *float64
 	epsilon       *float64
 	globalTrustId string
+	positiveGtId  string
 	maxIterations *int
 }
 

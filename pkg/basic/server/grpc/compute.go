@@ -146,6 +146,23 @@ func (svr *ComputeServer) BasicCompute(
 		return nil, status.Errorf(codes.Unavailable,
 			"cannot compute EigenTrust: %s", err.Error())
 	}
+	if request.Params.PositiveGlobalTrustId != "" {
+		if gtp, ok := svr.core.StoredTrustVectors.Load(request.Params.PositiveGlobalTrustId); ok {
+			_ = gtp.LockAndRun(func(
+				tp *sparse.Vector, timestamp *big.Int,
+			) error {
+				tp.Assign(t)
+				if timestamp.Cmp(ts) < 0 {
+					timestamp.Set(ts)
+				}
+				return nil
+			})
+		} else {
+			logger.Warn().
+				Str("id", request.Params.PositiveGlobalTrustId).
+				Msg("positive global trust vector not found")
+		}
+	}
 	basic.DiscountTrustVector(t, discounts)
 	_ = gt.LockAndRun(func(t1 *sparse.Vector, timestamp *big.Int) error {
 		t1.Assign(t)
