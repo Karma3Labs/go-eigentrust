@@ -87,10 +87,6 @@ func (svr *TrustVectorServer) Update(
 		return nil, status.Error(codes.NotFound, "vector not found")
 	}
 	err = tv.LockAndRun(func(v *sparse.Vector, timestamp *big.Int) error {
-		updateTimestamp := Qwords2BigUint(request.Header.TimestampQwords)
-		if updateTimestamp.Cmp(timestamp) < 0 {
-			return status.Error(codes.InvalidArgument, "stale update rejected")
-		}
 		var (
 			i, size int
 			err1    error
@@ -109,7 +105,16 @@ func (svr *TrustVectorServer) Update(
 			}
 		}
 		v.Merge(sparse.NewVector(size, entries))
-		timestamp.Set(updateTimestamp)
+		updateTimestamp := Qwords2BigUint(request.Header.TimestampQwords)
+		switch cmp := updateTimestamp.Cmp(timestamp); {
+		case cmp > 0:
+			timestamp.Set(updateTimestamp)
+		case cmp < 0:
+			svr.logger.Warn().
+				Str("updateTimestamp", updateTimestamp.String()).
+				Str("vectorTimestamp", timestamp.String()).
+				Msg("accepted stale update")
+		}
 		return nil
 	})
 	if err != nil {

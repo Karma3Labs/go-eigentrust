@@ -93,10 +93,6 @@ func (svr *TrustMatrixServer) Update(
 		return nil, status.Error(codes.NotFound, "matrix not found")
 	}
 	err = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
-		updateTimestamp := Qwords2BigUint(request.Header.TimestampQwords)
-		if updateTimestamp.Cmp(timestamp) < 0 {
-			return status.Error(codes.InvalidArgument, "stale update rejected")
-		}
 		var rows, cols int
 		entries := make([]sparse.CooEntry, 0, len(request.Entries))
 		for _, entry := range request.Entries {
@@ -132,6 +128,16 @@ func (svr *TrustMatrixServer) Update(
 		c.Merge(&c2.CSMatrix)
 		if e := c.Mmap(ctx); e != nil {
 			zerolog.Ctx(ctx).Err(e).Msg("cannot mmap")
+		}
+		updateTimestamp := Qwords2BigUint(request.Header.TimestampQwords)
+		switch cmp := updateTimestamp.Cmp(timestamp); {
+		case cmp > 0:
+			timestamp.Set(updateTimestamp)
+		case cmp < 0:
+			svr.logger.Warn().
+				Str("updateTimestamp", updateTimestamp.String()).
+				Str("matrixTimestamp", timestamp.String()).
+				Msg("accepted stale update")
 		}
 		timestamp.Set(updateTimestamp)
 		return nil
