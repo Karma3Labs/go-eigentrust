@@ -136,10 +136,14 @@ func mergeSpan(s1, s2 []Entry) []Entry {
 				s = append(s, s1[i1])
 				i1++
 			case index2 < index1:
-				s = append(s, s2[i2])
+				if s2[i2].Value != 0 {
+					s = append(s, s2[i2])
+				}
 				i2++
 			default: // s1[i1].Index == s2[i2].Index, s2 wins
-				s = append(s, s2[i2])
+				if s2[i2].Value != 0 {
+					s = append(s, s2[i2])
+				}
 				i1++
 				i2++
 			}
@@ -325,15 +329,14 @@ type CSRMatrix struct {
 //
 // The given entries are sorted in row-column order.
 func NewCSRMatrix(
-	rows, cols int,
-	entries []CooEntry,
+	rows, cols int, entries []CooEntry, includeZero bool,
 ) *CSRMatrix {
 	var entries2 [][]Entry
 	if rows != 0 {
 		entries2 = make([][]Entry, rows)
 	}
 	for _, e := range entries {
-		if e.Value == 0 {
+		if e.Value == 0 && !includeZero {
 			continue
 		}
 		entries2[e.Row] = append(entries2[e.Row], Entry{
