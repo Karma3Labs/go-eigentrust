@@ -38,6 +38,9 @@ var (
 	flatTailStatsFilename string
 	maxIterations         int
 	csvHasHeader          bool
+	rawPeerIds            bool
+	peerIds               []string
+	peerIndices           map[string]int
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -103,17 +106,17 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 			continue
 		}
 		var (
-			from, to int64
+			from, to int
 			value    float64
 		)
-		from, err = strconv.ParseInt(fields[0], 0, 0)
+		from, err = getPeerIndex(fields[0])
 		switch {
 		case err != nil:
 			return inputWrapf(err, 0, "invalid from=%#v", fields[0])
 		case from < 0:
 			return inputErrorf(0, "negative from=%#v", from)
 		}
-		to, err = strconv.ParseInt(fields[1], 0, 0)
+		to, err = getPeerIndex(fields[1])
 		switch {
 		case err != nil:
 			return inputWrapf(err, 1, "invalid to=%#v", fields[1])
@@ -127,14 +130,13 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		case value < 0:
 			return inputErrorf(2, "negative value=%#v", value)
 		}
-		i, j := int(from), int(to)
 		inline.Entries = append(inline.Entries,
-			basic.InlineLocalTrustEntry{I: i, J: j, V: value})
-		if inline.Size <= i {
-			inline.Size = i + 1
+			basic.InlineLocalTrustEntry{I: from, J: to, V: value})
+		if inline.Size <= from {
+			inline.Size = from + 1
 		}
-		if inline.Size <= j {
-			inline.Size = j + 1
+		if inline.Size <= to {
+			inline.Size = to + 1
 		}
 	}
 	if inline.Size == 0 {
@@ -219,17 +221,16 @@ func loadInlineTrustVectorCsv(
 			continue
 		}
 		var (
-			from  int64
+			from  int
 			value float64
 		)
-		from, err = strconv.ParseInt(fields[0], 0, 0)
+		from, err = getPeerIndex(fields[0])
 		switch {
 		case err != nil:
 			return inputWrapf(err, 0, "invalid from=%#v", fields[0])
 		case from < 0:
 			return inputErrorf(0, "negative from=%#v", from)
 		}
-		i := int(from)
 		value, err = strconv.ParseFloat(fields[1], 64)
 		switch {
 		case err != nil:
@@ -238,9 +239,9 @@ func loadInlineTrustVectorCsv(
 			return inputErrorf(1, "negative value=%#v", value)
 		}
 		inline.Entries = append(inline.Entries,
-			basic.InlineTrustVectorEntry{I: i, V: value})
-		if inline.Size <= i {
-			inline.Size = i + 1
+			basic.InlineTrustVectorEntry{I: from, V: value})
+		if inline.Size <= from {
+			inline.Size = from + 1
 		}
 	}
 	if inline.Size == 0 {
@@ -266,8 +267,13 @@ func writeOutput(
 	defer file.Close()
 	csvWriter := csv.NewWriter(file)
 	for _, entry := range entries {
+		var peerId string
+		peerId, err = getPeerId(entry.I)
+		if err != nil {
+			return err
+		}
 		if err = csvWriter.Write([]string{
-			strconv.FormatInt(int64(entry.I), 10),
+			peerId,
 			strconv.FormatFloat(entry.V, 'f', -1, 64),
 		}); err != nil {
 			return err
@@ -374,6 +380,31 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	}
 }
 
+func getPeerIndex(peerId string) (peerIndex int, err error) {
+	if rawPeerIds {
+		i64, e := strconv.ParseInt(peerId, 0, 0)
+		peerIndex, err = int(i64), e
+	} else if existing, ok := peerIndices[peerId]; ok {
+		peerIndex = existing
+	} else {
+		peerIndex = len(peerIds)
+		peerIds = append(peerIds, peerId)
+		peerIndices[peerId] = peerIndex
+	}
+	return
+}
+
+func getPeerId(peerIndex int) (peerId string, err error) {
+	if rawPeerIds {
+		peerId = strconv.FormatInt(int64(peerIndex), 10)
+	} else if peerIndex < len(peerIds) {
+		peerId = peerIds[peerIndex]
+	} else {
+		err = errors.Errorf("unknown peer index %d", peerIndex)
+	}
+	return
+}
+
 func init() {
 	basicCmd.AddCommand(basicComputeCmd)
 	basicComputeCmd.Flags().StringVarP(&localTrustURI, "local-trust", "l",
@@ -414,4 +445,8 @@ for flat-tail algorithm and stats.
 		`Maximum number of iterations. 0 (default) means unlimited`)
 	basicComputeCmd.Flags().BoolVar(&csvHasHeader, "csv-header", true,
 		`Whether input CSV has a header line (default: true)`)
+	basicComputeCmd.Flags().BoolVar(&rawPeerIds, "raw-peer-ids", false,
+		`Whether to use truster/trustee in input CSV directly as peer indices
+(default: false)`)
+	peerIndices = make(map[string]int)
 }
