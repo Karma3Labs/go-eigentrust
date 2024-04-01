@@ -37,6 +37,7 @@ var (
 	outputFilename        string
 	flatTailStatsFilename string
 	maxIterations         int
+	csvHasHeader          bool
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -88,6 +89,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 			fmt.Sprintf(format, v...))
 	}
 	inline := basic.InlineLocalTrust{}
+	ignoreFirst := csvHasHeader
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
 		if len(fields) < 2 {
@@ -95,6 +97,10 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		}
 		if len(fields) > 3 {
 			return inputErrorf(0, "too many (%d) fields", len(fields))
+		}
+		if ignoreFirst {
+			ignoreFirst = false
+			continue
 		}
 		var (
 			from, to int64
@@ -199,6 +205,7 @@ func loadInlineTrustVectorCsv(
 		Scheme:  "inline",
 		Size:    0,
 	}
+	ignoreFirst := csvHasHeader
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
 		if len(fields) < 1 {
@@ -206,6 +213,10 @@ func loadInlineTrustVectorCsv(
 		}
 		if len(fields) > 2 {
 			return inputErrorf(0, "too many (%d) fields", len(fields))
+		}
+		if ignoreFirst {
+			ignoreFirst = false
+			continue
 		}
 		var (
 			from  int64
@@ -401,4 +412,6 @@ for flat-tail algorithm and stats.
 "" (default) suppresses output; "-" uses standard output`)
 	basicComputeCmd.Flags().IntVar(&maxIterations, "max-iterations", 0,
 		`Maximum number of iterations. 0 (default) means unlimited`)
+	basicComputeCmd.Flags().BoolVar(&csvHasHeader, "csv-header", true,
+		`Whether input CSV has a header line (default: true)`)
 }
