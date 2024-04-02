@@ -191,3 +191,49 @@ func Compute(
 	}
 	return t, nil
 }
+
+// DiscountTrustVector adjusts the given global trust vector
+// by the negative trust given in the discounts vector.
+//
+// DiscountTrustVector does this
+// by scaling non-zero discount rows with the distruster's own trust score
+// and subtracting the scaled discount row from the global trust vector.
+//
+// The caller shall ensure that the discounts vector is canonicalized.
+func DiscountTrustVector(t *sparse.Vector, discounts *sparse.Matrix) {
+	// t is adjusted in place, so take the unadjusted clone for discount weight.
+	i1 := 0
+	t1 := t.Clone()
+	// find distrusters with nonzero reps in t1 by merge-matching
+DiscountsLoop:
+	for distruster, distrusts := range discounts.Entries {
+	T1Loop:
+		for {
+			switch {
+			case i1 >= len(t1.Entries):
+				// no more nonzero trust, remaining distrusters have zero rep
+				// and their distrusts do not matter, so finish
+				break DiscountsLoop
+			case t1.Entries[i1].Index < distruster:
+				// the peer at i1 has no distrust,
+				// advance to the next peer
+				i1++
+				continue T1Loop
+			case t1.Entries[i1].Index == distruster:
+				// found a match!
+				break T1Loop
+			case t1.Entries[i1].Index > distruster:
+				// distruster has zero rep,
+				// advance to the next distruster
+				continue DiscountsLoop
+			}
+		}
+		scaledDistrustVec := &sparse.Vector{}
+		scaledDistrustVec.ScaleVec(t1.Entries[i1].Value, &sparse.Vector{
+			Dim:     t.Dim,
+			Entries: distrusts,
+		})
+		t.SubVec(t, scaledDistrustVec)
+		i1++
+	}
+}

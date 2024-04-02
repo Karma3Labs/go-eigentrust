@@ -140,10 +140,24 @@ func (server *StrictServerImpl) compute(
 	if t0 != nil {
 		CanonicalizeTrustVector(t0)
 	}
+	discounts, err := ExtractDistrust(c)
+	if err != nil {
+		err = HTTPError{
+			400, errors.Wrapf(err, "cannot extract discounts"),
+		}
+		return
+	}
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = HTTPError{
 			400, errors.Wrapf(err, "cannot canonicalize local trust"),
+		}
+		return
+	}
+	err = CanonicalizeLocalTrust(discounts, nil)
+	if err != nil {
+		err = HTTPError{
+			400, errors.Wrapf(err, "cannot canonicalize discounts"),
 		}
 		return
 	}
@@ -155,6 +169,7 @@ func (server *StrictServerImpl) compute(
 		err = errors.Wrapf(err, "cannot compute EigenTrust")
 		return
 	}
+	DiscountTrustVector(t, discounts)
 	var itv InlineTrustVector
 	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
 	itv.Size = t.Dim
@@ -344,7 +359,8 @@ func (server *StrictServerImpl) loadLocalTrust(
 		}
 		return server.loadStoredLocalTrust(&stored)
 	default:
-		return nil, errors.Errorf("unknown local trust ref type %#v", ref.Scheme)
+		return nil, errors.Errorf("unknown local trust ref type %#v",
+			ref.Scheme)
 	}
 }
 
@@ -363,10 +379,6 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 		if entry.J < 0 || entry.J >= inline.Size {
 			return nil, errors.Errorf("entry %d: j=%d is out of range [0..%d)",
 				idx, entry.J, inline.Size)
-		}
-		if entry.V <= 0 {
-			return nil, errors.Errorf("entry %d: v=%f is out of range (0, inf)",
-				idx, entry.V)
 		}
 		entries = append(entries, sparse.CooEntry{
 			Row:    entry.I,
