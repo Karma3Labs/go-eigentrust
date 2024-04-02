@@ -25,6 +25,16 @@ Or from a local clone of this repository:
 go install ./cmd/eigentrust
 ```
 
+Try running `eigentrust` with no arguments:
+
+```shell
+eigentrust
+```
+
+If you see the help message, your `$PATH` is already set up correctly.
+If you get a command-not-found error, you need to add `$GOBIN` to `$PATH` (see
+*Appendix > Updating `$PATH`* at the end of this README).
+
 ## Running Server
 
 ```shell
@@ -86,11 +96,13 @@ Here, the EigenTrust algorithm distributed the network's trust onto the 3 peers:
 * SD gets 30.2%
 * VM gets 48.1%
 
+## Appendix
+
 ### Tweaking Alpha
 
 The pre-trust input defines the *relative* ratio
 by which the network distributes its *a priori* trust onto trustworthy peers,
-in this case EK and SD.
+in this case EK and VM.
 
 You can also tweak the overall *absolute* strength of the pre-trust.
 This parameter, named *alpha*,
@@ -102,7 +114,7 @@ The CLI default for alpha is 0.5 (50%).  If you re-run EigenTrust using a lower
 alpha of only 0.01 (1%):
 
 ```shell
-eigentrust basic compute -L -l lt.csv -p pt.csv -a 0.1
+eigentrust basic compute -L -l lt.csv -p pt.csv -a 0.01
 ```
 
 We get a different result:
@@ -118,3 +130,23 @@ whereas SD's trust share soared (30.2% ⇒ 44%) despite not being pre-trusted.
 This is because, with only 1% pre-trust level,
 the peer-to-peer trust opinions (where SD is trusted by both EK and VM)
 make up for a much larger portion of trust.
+
+### Updating `$PATH`
+
+For Bourne shell compatibles (sh/bash/zsh/…), add this to `~/.profile`,
+and restart the shell you are using for this tutorial
+(or run the same command in the shell directly).
+
+```sh
+PATH="${PATH+"${PATH}:"}${GOBIN:-"${GOPATH:-"${HOME}/go"}/bin"}"
+```
+
+For C shell and compatibles (csh/tcsh/…), add this to `~/.login`,
+and restart the shell you are using for this tutorial
+(or run the same commands in the shell directly).
+
+```csh
+if (! $?GOPATH) setenv GOPATH ~/go
+if (! $?GOBIN) setenv GOBIN "${GOPATH}/bin"
+set path = ($path $GOBIN)
+```
