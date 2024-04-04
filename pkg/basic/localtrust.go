@@ -10,9 +10,12 @@ import (
 // CanonicalizeLocalTrust canonicalizes localTrust in-place,
 // i.e. scales each row so that its entries sum to one.
 //
-// Zero rows are replaced by preTrust vector.
+// If a non-nil preTrust vector is given,
+// CanonicalizeLocalTrust substitutes it for zero rows in localTrust,
+// i.e. the preTrust vector serves as the default outbound trust
+// for peers without trust opinions.
 //
-// The receiver and trustVector must have the same dimension.
+// If preTrust is not nil, it must have the same dimension as localTrust.
 func CanonicalizeLocalTrust(
 	localTrust *sparse.Matrix, preTrust *sparse.Vector,
 ) error {
@@ -20,7 +23,7 @@ func CanonicalizeLocalTrust(
 	if err != nil {
 		return err
 	}
-	if n != preTrust.Dim {
+	if preTrust != nil && n != preTrust.Dim {
 		return sparse.ErrDimensionMismatch
 	}
 	for i := 0; i < n; i++ {
@@ -28,12 +31,46 @@ func CanonicalizeLocalTrust(
 		switch err := Canonicalize(inRow.Entries); err {
 		case nil:
 		case sparse.ErrZeroSum:
-			localTrust.SetRowVector(i, preTrust)
+			if preTrust != nil {
+				localTrust.SetRowVector(i, preTrust)
+			}
 		default:
 			return err
 		}
 	}
 	return nil
+}
+
+// ExtractDistrust extracts negative local trust from the given
+// local trust, leaving only positive ones in the original.
+// Extracted negative values are sign reversed, i.e. they are positive.
+func ExtractDistrust(
+	localTrust *sparse.Matrix,
+) (*sparse.Matrix, error) {
+	n, err := localTrust.Dim()
+	if err != nil {
+		return nil, err
+	}
+	distrust := sparse.NewCSRMatrix(n, n, nil)
+	for truster := 0; truster < n; truster++ {
+		trustRow := localTrust.Entries[truster]
+		distrustRow := distrust.Entries[truster]
+		for i, entry := range trustRow {
+			if entry.Value >= 0 {
+				trustRow[i-len(distrustRow)] = entry
+			} else {
+				entry.Value = -entry.Value
+				distrustRow = append(distrustRow, entry)
+			}
+		}
+		trustRow = trustRow[:len(trustRow)-len(distrustRow)]
+		if len(trustRow) == 0 {
+			trustRow = nil
+		}
+		localTrust.Entries[truster] = trustRow
+		distrust.Entries[truster] = distrustRow
+	}
+	return distrust, nil
 }
 
 // ReadLocalTrustFromCsv reads a local trust matrix from the given CSV file.
