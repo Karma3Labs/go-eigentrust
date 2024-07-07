@@ -127,8 +127,6 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		switch {
 		case err != nil:
 			return inputWrapf(err, 2, "invalid trust value=%#v", fields[2])
-		case value < 0:
-			return inputErrorf(2, "negative value=%#v", value)
 		}
 		inline.Entries = append(inline.Entries,
 			basic.InlineLocalTrustEntry{I: from, J: to, V: value})
