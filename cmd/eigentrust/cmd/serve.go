@@ -8,7 +8,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
-	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/api/openapi"
+	"k3l.io/go-eigentrust/pkg/basic/server"
 )
 
 var (
@@ -29,9 +30,9 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server := basic.NewStrictServerImpl(logger)
-			basic.RegisterHandlersWithBaseURL(e,
-				basic.NewStrictHandler(server, nil), "/basic/v1")
+			server := server.NewOAPIStrictServerImpl(logger)
+			openapi.RegisterHandlersWithBaseURL(e,
+				openapi.NewStrictHandler(server, nil), "/basic/v1")
 			var err error
 			if listenAddress == "" {
 				port := 80

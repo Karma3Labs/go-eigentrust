@@ -8,10 +8,10 @@ esac
 git grep -l '^//go:generate ' -- '*.go' | \
 	"${progdir}/xargs_by_dir.sh" go generate -v -x
 patch -p1 -N << "ENDEND"
-diff --git a/pkg/basic/openapi.go b/pkg/basic/openapi.go
+diff --git a/pkg/api/openapi/openapi.go b/pkg/api/openapi/openapi.go
 index ae14eb4..4e00e54 100644
---- a/pkg/basic/openapi.go
-+++ b/pkg/basic/openapi.go
+--- a/pkg/api/openapi/openapi.go
++++ b/pkg/api/openapi/openapi.go
 @@ -1559,7 +1559,7 @@ func (response Compute200JSONResponse) VisitComputeResponse(w http.ResponseWrite
  	w.Header().Set("Content-Type", "application/json")
  	w.WriteHeader(200)

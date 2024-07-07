@@ -14,6 +14,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"k3l.io/go-eigentrust/pkg/api/openapi"
 	"k3l.io/go-eigentrust/pkg/basic"
 	"k3l.io/go-eigentrust/pkg/util"
 )
@@ -43,7 +44,7 @@ var (
 	peerIndices           map[string]int
 )
 
-func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
+func localTrustURIToRef(uri string, ref *openapi.LocalTrustRef) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return err
@@ -61,7 +62,7 @@ func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
 	}
 }
 
-func loadInlineLocalTrust(filename string, ref *basic.LocalTrustRef) error {
+func loadInlineLocalTrust(filename string, ref *openapi.LocalTrustRef) error {
 	logger.Trace().Str("filename", filename).Msg("loading inline local trust")
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
@@ -72,7 +73,9 @@ func loadInlineLocalTrust(filename string, ref *basic.LocalTrustRef) error {
 	}
 }
 
-func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
+func loadInlineLocalTrustCsv(
+	filename string, ref *openapi.LocalTrustRef,
+) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -91,7 +94,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
 			fmt.Sprintf(format, v...))
 	}
-	inline := basic.InlineLocalTrust{}
+	inline := openapi.InlineLocalTrust{}
 	ignoreFirst := csvHasHeader
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
@@ -129,7 +132,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 			return inputWrapf(err, 2, "invalid trust value=%#v", fields[2])
 		}
 		inline.Entries = append(inline.Entries,
-			basic.InlineLocalTrustEntry{I: from, J: to, V: value})
+			openapi.InlineLocalTrustEntry{I: from, J: to, V: value})
 		if inline.Size <= from {
 			inline.Size = from + 1
 		}
@@ -150,7 +153,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	return nil
 }
 
-func trustVectorURIToRef(uri string, ref *basic.TrustVectorRef) error {
+func trustVectorURIToRef(uri string, ref *openapi.TrustVectorRef) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return err
@@ -168,7 +171,7 @@ func trustVectorURIToRef(uri string, ref *basic.TrustVectorRef) error {
 	}
 }
 
-func loadInlineTrustVector(filename string, ref *basic.TrustVectorRef) error {
+func loadInlineTrustVector(filename string, ref *openapi.TrustVectorRef) error {
 	logger.Trace().Str("filename", filename).Msg("loading inline trust vector")
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
@@ -180,7 +183,7 @@ func loadInlineTrustVector(filename string, ref *basic.TrustVectorRef) error {
 }
 
 func loadInlineTrustVectorCsv(
-	filename string, ref *basic.TrustVectorRef,
+	filename string, ref *openapi.TrustVectorRef,
 ) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -200,7 +203,7 @@ func loadInlineTrustVectorCsv(
 		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
 			fmt.Sprintf(format, v...))
 	}
-	inline := basic.InlineTrustVector{
+	inline := openapi.InlineTrustVector{
 		Entries: nil,
 		Scheme:  "inline",
 		Size:    0,
@@ -237,7 +240,7 @@ func loadInlineTrustVectorCsv(
 			return inputErrorf(1, "negative value=%#v", value)
 		}
 		inline.Entries = append(inline.Entries,
-			basic.InlineTrustVectorEntry{I: from, V: value})
+			openapi.InlineTrustVectorEntry{I: from, V: value})
 		if inline.Size <= from {
 			inline.Size = from + 1
 		}
@@ -256,7 +259,7 @@ func loadInlineTrustVectorCsv(
 }
 
 func writeOutput(
-	entries []basic.InlineTrustVectorEntry, filename string,
+	entries []openapi.InlineTrustVectorEntry, filename string,
 ) error {
 	file, err := util.OpenOutputFile(filename)
 	if err != nil {
@@ -300,7 +303,7 @@ func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
 func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	basicSetupEndpoint()
 	var err error
-	client, err := basic.NewClientWithResponses(endpoint)
+	client, err := openapi.NewClientWithResponses(endpoint)
 	if err != nil {
 		logger.Err(err).Msg("cannot create an API client")
 		return
@@ -310,7 +313,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if epsilon == 0 {
 		epsilonP = nil
 	}
-	requestBody := basic.ComputeWithStatsJSONRequestBody{
+	requestBody := openapi.ComputeWithStatsJSONRequestBody{
 		Alpha:        &alpha,
 		Epsilon:      epsilonP,
 		PreTrust:     nil,
@@ -322,7 +325,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		return
 	}
 	if preTrustURI != "" {
-		var preTrustRef basic.TrustVectorRef
+		var preTrustRef openapi.TrustVectorRef
 		err = trustVectorURIToRef(preTrustURI, &preTrustRef)
 		if err != nil {
 			logger.Err(err).Msg("cannot parse/load pre-trust reference")
@@ -331,7 +334,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		requestBody.PreTrust = &preTrustRef
 	}
 	if initialTrustURI != "" {
-		var initialTrustRef basic.TrustVectorRef
+		var initialTrustRef openapi.TrustVectorRef
 		err = trustVectorURIToRef(initialTrustURI, &initialTrustRef)
 		if err != nil {
 			logger.Err(err).Msg("cannot parse/load initial trust reference")
