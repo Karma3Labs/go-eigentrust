@@ -143,9 +143,10 @@ func TestNewCSRMatrix(t *testing.T) {
 		entries    []CooEntry
 	}
 	tests := []struct {
-		name string
-		args args
-		want *CSRMatrix
+		name  string
+		args  args
+		want  *CSRMatrix
+		want0 *CSRMatrix
 	}{
 		{
 			name: "Empty",
@@ -175,7 +176,7 @@ func TestNewCSRMatrix(t *testing.T) {
 					{3, 1, 700},
 					{1, 1, 400},
 					{0, 1, 200},
-					{2, 1, 0}, // zero value should be dropped
+					{2, 1, 0}, // zero value should be dropped iff !includeZero
 					{1, 3, 500},
 					{3, 3, 900},
 					{4, 2, 1000},
@@ -196,14 +197,34 @@ func TestNewCSRMatrix(t *testing.T) {
 					},
 				},
 			},
+			want0: &CSRMatrix{
+				CSMatrix: CSMatrix{
+					MajorDim: 5,
+					MinorDim: 4,
+					Entries: [][]Entry{
+						{{0, 100}, {1, 200}, {2, 300}},
+						{{1, 400}, {3, 500}},
+						{{1, 0}},
+						{{0, 600}, {1, 700}, {2, 800}, {3, 900}},
+						{{2, 1000}},
+					},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := NewCSRMatrix(
-				tt.args.rows, tt.args.cols, tt.args.entries,
+				tt.args.rows, tt.args.cols, tt.args.entries, false,
 			); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewCSRMatrix() = %v, want %v", got, tt.want)
+			}
+			if tt.want0 != nil {
+				if got := NewCSRMatrix(
+					tt.args.rows, tt.args.cols, tt.args.entries, true,
+				); !reflect.DeepEqual(got, tt.want0) {
+					t.Errorf("NewCSRMatrix() = %v, want0 %v", got, tt.want0)
+				}
 			}
 		})
 	}
