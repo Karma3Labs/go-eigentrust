@@ -133,3 +133,7 @@ __pycache__/
 # eigentrust basic compute input/output files
 *.csv
 *.json
+
+# patch(1) byproducts
+*.orig
+*.rej
