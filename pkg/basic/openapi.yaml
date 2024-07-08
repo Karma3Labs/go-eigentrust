@@ -1,8 +1,8 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: EigenTrust Basic API
   summary: The EigenTrust Basic API implements the Basic EigenTrust algorithm.
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: 'https://api.k3l.io/basic/v1/'
     description: |
@@ -169,6 +169,7 @@ paths:
         - $ref: "#/components/parameters/LocalTrustIdParam"
       responses:
         "200":
+          description: The requested local trust contents.
           content:
             "application/json":
               schema:
@@ -187,6 +188,15 @@ paths:
           description: The local trust exists.
         "404":
           description: The local trust does not exist.
+  /status:
+    get:
+      summary: Get the health check status
+      operationId: getStatus
+      responses:
+        "200":
+          $ref: "#/components/responses/ServerReady"
+        "500":
+          $ref: "#/components/responses/ServerNotReady"
 components:
   parameters:
     LocalTrustIdParam:
@@ -524,6 +534,15 @@ components:
           items:
             type: integer
             minimum: 0
+    ServerStatus:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: |
+            The server status message.
+          type: string
   requestBodies:
     ComputeRequestBody:
       description: |
@@ -775,3 +794,15 @@ components:
                 A parameter validation error.
               value:
                 message: "cannot load local trust: unknown local trust ref type"
+    ServerReady:
+      description: Server is ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
+    ServerNotReady:
+      description: Server is not ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
