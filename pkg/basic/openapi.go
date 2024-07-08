@@ -21,6 +21,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// Defines values for InlineLocalTrustScheme.
+const (
+	InlineLocalTrustSchemeInline InlineLocalTrustScheme = "inline"
+)
+
 // Defines values for InlineTrustVectorScheme.
 const (
 	InlineTrustVectorSchemeInline InlineTrustVectorScheme = "inline"
@@ -28,8 +33,30 @@ const (
 
 // Defines values for LocalTrustRefScheme.
 const (
-	LocalTrustRefSchemeInline LocalTrustRefScheme = "inline"
-	LocalTrustRefSchemeStored LocalTrustRefScheme = "stored"
+	LocalTrustRefSchemeInline        LocalTrustRefScheme = "inline"
+	LocalTrustRefSchemeObjectstorage LocalTrustRefScheme = "objectstorage"
+	LocalTrustRefSchemeStored        LocalTrustRefScheme = "stored"
+)
+
+// Defines values for ObjectStorageLocalTrustScheme.
+const (
+	ObjectStorageLocalTrustSchemeObjectstorage ObjectStorageLocalTrustScheme = "objectstorage"
+)
+
+// Defines values for ObjectStorageTrustVectorScheme.
+const (
+	ObjectStorageTrustVectorSchemeObjectstorage ObjectStorageTrustVectorScheme = "objectstorage"
+)
+
+// Defines values for StoredLocalTrustScheme.
+const (
+	Stored StoredLocalTrustScheme = "stored"
+)
+
+// Defines values for TrustVectorRefScheme.
+const (
+	TrustVectorRefSchemeInline        TrustVectorRefScheme = "inline"
+	TrustVectorRefSchemeObjectstorage TrustVectorRefScheme = "objectstorage"
 )
 
 // FlatTailStats Flat-tail algorithm stats and peer ranking.
@@ -74,10 +101,16 @@ type InlineLocalTrust struct {
 	// i.e. no trust relationship.
 	Entries []InlineLocalTrustEntry `json:"entries"`
 
+	// Scheme A fixed string `"inline"`.
+	Scheme InlineLocalTrustScheme `json:"scheme"`
+
 	// Size Denotes the number of peers in the local trust,
 	// i.e. its square dimension.
 	Size int `json:"size"`
 }
+
+// InlineLocalTrustScheme A fixed string `"inline"`.
+type InlineLocalTrustScheme string
 
 // InlineLocalTrustEntry Represents an entry in the local trust matrix.
 //
@@ -152,18 +185,59 @@ type LocalTrustRef struct {
 // LocalTrustRefScheme Local trust reference scheme, akin to URI scheme.
 type LocalTrustRefScheme string
 
+// ObjectStorageLocalTrust Refers to a local trust matrix in a remote object storage service.
+type ObjectStorageLocalTrust struct {
+	// Scheme A fixed string `"objectstorage"`.
+	Scheme ObjectStorageLocalTrustScheme `json:"scheme"`
+
+	// Url URL of the trust matrix file.
+	//
+	// It must refer to a CSV file, with three columns `i`, `j`, and `v`.
+	// Currently the `s3://` URL scheme (AWS S3) is supported.
+	Url string `json:"url"`
+}
+
+// ObjectStorageLocalTrustScheme A fixed string `"objectstorage"`.
+type ObjectStorageLocalTrustScheme string
+
+// ObjectStorageTrustVector Refers to a trust vector in a remote object storage service.
+type ObjectStorageTrustVector struct {
+	// Scheme A fixed string `"objectstorage"`.
+	Scheme ObjectStorageTrustVectorScheme `json:"scheme"`
+
+	// Url URL of the trust vector file.
+	//
+	// It must refer to a CSV file, with two columns `i` and `v`.
+	// Currently the `s3://` URL scheme (AWS S3) is supported.
+	Url string `json:"url"`
+}
+
+// ObjectStorageTrustVectorScheme A fixed string `"objectstorage"`.
+type ObjectStorageTrustVectorScheme string
+
 // StoredLocalTrust Refers to a local trust stored on the server.
 //
 // Stored local trust is identified with its ID string.
 type StoredLocalTrust struct {
 	// Id Denotes a local trust collection.
 	Id LocalTrustId `json:"id"`
+
+	// Scheme A fixed string `"stored"`.
+	Scheme StoredLocalTrustScheme `json:"scheme"`
 }
 
-// TrustVectorRef Refers to a trust vector.
+// StoredLocalTrustScheme A fixed string `"stored"`.
+type StoredLocalTrustScheme string
+
+// TrustVectorRef defines model for TrustVectorRef.
 type TrustVectorRef struct {
-	union json.RawMessage
+	// Scheme Trust vector reference scheme, akin to URI scheme.
+	Scheme TrustVectorRefScheme `json:"scheme"`
+	union  json.RawMessage
 }
+
+// TrustVectorRefScheme Trust vector reference scheme, akin to URI scheme.
+type TrustVectorRefScheme string
 
 // LocalTrustIdParam Denotes a local trust collection.
 type LocalTrustIdParam = LocalTrustId
@@ -350,6 +424,32 @@ func (t *LocalTrustRef) MergeStoredLocalTrust(v StoredLocalTrust) error {
 	return err
 }
 
+// AsObjectStorageLocalTrust returns the union data inside the LocalTrustRef as a ObjectStorageLocalTrust
+func (t LocalTrustRef) AsObjectStorageLocalTrust() (ObjectStorageLocalTrust, error) {
+	var body ObjectStorageLocalTrust
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromObjectStorageLocalTrust overwrites any union data inside the LocalTrustRef as the provided ObjectStorageLocalTrust
+func (t *LocalTrustRef) FromObjectStorageLocalTrust(v ObjectStorageLocalTrust) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeObjectStorageLocalTrust performs a merge with any union data inside the LocalTrustRef, using the provided ObjectStorageLocalTrust
+func (t *LocalTrustRef) MergeObjectStorageLocalTrust(v ObjectStorageLocalTrust) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JsonMerge(b, t.union)
+	t.union = merged
+	return err
+}
+
 func (t LocalTrustRef) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	if err != nil {
@@ -419,13 +519,72 @@ func (t *TrustVectorRef) MergeInlineTrustVector(v InlineTrustVector) error {
 	return err
 }
 
+// AsObjectStorageTrustVector returns the union data inside the TrustVectorRef as a ObjectStorageTrustVector
+func (t TrustVectorRef) AsObjectStorageTrustVector() (ObjectStorageTrustVector, error) {
+	var body ObjectStorageTrustVector
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromObjectStorageTrustVector overwrites any union data inside the TrustVectorRef as the provided ObjectStorageTrustVector
+func (t *TrustVectorRef) FromObjectStorageTrustVector(v ObjectStorageTrustVector) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeObjectStorageTrustVector performs a merge with any union data inside the TrustVectorRef, using the provided ObjectStorageTrustVector
+func (t *TrustVectorRef) MergeObjectStorageTrustVector(v ObjectStorageTrustVector) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JsonMerge(b, t.union)
+	t.union = merged
+	return err
+}
+
 func (t TrustVectorRef) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["scheme"], err = json.Marshal(t.Scheme)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'scheme': %w", err)
+	}
+
+	b, err = json.Marshal(object)
 	return b, err
 }
 
 func (t *TrustVectorRef) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["scheme"]; found {
+		err = json.Unmarshal(raw, &t.Scheme)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheme': %w", err)
+		}
+	}
+
 	return err
 }
 
@@ -1600,7 +1759,7 @@ func (response ComputeWithStats400JSONResponse) VisitComputeWithStatsResponse(w 
 }
 
 type DeleteLocalTrustRequestObject struct {
-	Id LocalTrustIdParam `json:"id,omitempty"`
+	Id LocalTrustIdParam `json:"id"`
 }
 
 type DeleteLocalTrustResponseObject interface {
@@ -1633,7 +1792,7 @@ func (response DeleteLocalTrust404Response) VisitDeleteLocalTrustResponse(w http
 }
 
 type GetLocalTrustRequestObject struct {
-	Id LocalTrustIdParam `json:"id,omitempty"`
+	Id LocalTrustIdParam `json:"id"`
 }
 
 type GetLocalTrustResponseObject interface {
@@ -1658,7 +1817,7 @@ func (response GetLocalTrust404Response) VisitGetLocalTrustResponse(w http.Respo
 }
 
 type HeadLocalTrustRequestObject struct {
-	Id LocalTrustIdParam `json:"id,omitempty"`
+	Id LocalTrustIdParam `json:"id"`
 }
 
 type HeadLocalTrustResponseObject interface {
@@ -1682,7 +1841,7 @@ func (response HeadLocalTrust404Response) VisitHeadLocalTrustResponse(w http.Res
 }
 
 type UpdateLocalTrustRequestObject struct {
-	Id     LocalTrustIdParam `json:"id,omitempty"`
+	Id     LocalTrustIdParam `json:"id"`
 	Params UpdateLocalTrustParams
 	Body   *UpdateLocalTrustJSONRequestBody
 }
@@ -1919,78 +2078,82 @@ func (sh *strictHandler) UpdateLocalTrust(ctx echo.Context, id LocalTrustIdParam
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"p82lwf3H+/8PAAD//41zFYmWPQAA",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

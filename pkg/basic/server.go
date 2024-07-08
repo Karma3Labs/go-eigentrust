@@ -3,11 +3,19 @@ package basic
 import "C"
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"net/http"
+	"net/url"
+	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mohae/deepcopy"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -18,13 +26,21 @@ type StrictServerImpl struct {
 	logger              zerolog.Logger
 	storedLocalTrust    map[LocalTrustId]*sparse.Matrix
 	storedLocalTrustMtx sync.Mutex
+	awsConfig           aws.Config
 }
 
-func NewStrictServerImpl(logger zerolog.Logger) *StrictServerImpl {
+func NewStrictServerImpl(
+	ctx context.Context, logger zerolog.Logger,
+) (*StrictServerImpl, error) {
+	awsConfig, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load AWS config: %w", err)
+	}
 	return &StrictServerImpl{
 		logger:           logger,
 		storedLocalTrust: make(map[LocalTrustId]*sparse.Matrix),
-	}
+		awsConfig:        awsConfig,
+	}, nil
 }
 
 type HTTPError struct {
@@ -56,7 +72,7 @@ func (server *StrictServerImpl) compute(
 		t0 *sparse.Vector
 	)
 	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
-	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
+	if c, err = server.loadLocalTrust(ctx, localTrustRef); err != nil {
 		err = HTTPError{400, errors.Wrap(err, "cannot load local trust")}
 		return
 	}
@@ -71,7 +87,7 @@ func (server *StrictServerImpl) compute(
 	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
-	} else if p, err = loadTrustVector(preTrust); err != nil {
+	} else if p, err = server.loadTrustVector(ctx, preTrust); err != nil {
 		err = HTTPError{400, errors.Wrap(err, "cannot load pre-trust")}
 		return
 	} else {
@@ -90,7 +106,7 @@ func (server *StrictServerImpl) compute(
 		Msg("pre-trust loaded")
 	if initialTrust == nil {
 		t0 = nil
-	} else if t0, err = loadTrustVector(initialTrust); err != nil {
+	} else if t0, err = server.loadTrustVector(ctx, initialTrust); err != nil {
 		err = HTTPError{400, errors.Wrap(err, "cannot load initial trust")}
 		return
 	} else {
@@ -171,7 +187,6 @@ func (server *StrictServerImpl) compute(
 	}
 	DiscountTrustVector(t, discounts)
 	var itv InlineTrustVector
-	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
 	itv.Size = t.Dim
 	for _, e := range t.Entries {
 		itv.Entries = append(itv.Entries,
@@ -181,6 +196,7 @@ func (server *StrictServerImpl) compute(
 		err = errors.Wrapf(err, "cannot create response")
 		return
 	}
+	tv.Scheme = TrustVectorRefSchemeInline
 	return tv, flatTailStats, nil
 }
 
@@ -284,7 +300,7 @@ func (server *StrictServerImpl) getLocalTrust(
 }
 
 func (server *StrictServerImpl) HeadLocalTrust(
-	ctx context.Context, request HeadLocalTrustRequestObject,
+	_ context.Context, request HeadLocalTrustRequestObject,
 ) (HeadLocalTrustResponseObject, error) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
@@ -302,7 +318,7 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Str("func", "(*StrictServerImpl).UpdateLocalTrust").
 		Str("localTrustId", request.Id).
 		Logger()
-	c, err := server.loadLocalTrust(request.Body)
+	c, err := server.loadLocalTrust(ctx, request.Body)
 	if err != nil {
 		return nil, HTTPError{400, errors.Wrap(err, "cannot load local trust")}
 	}
@@ -332,7 +348,7 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 }
 
 func (server *StrictServerImpl) DeleteLocalTrust(
-	ctx context.Context, request DeleteLocalTrustRequestObject,
+	_ context.Context, request DeleteLocalTrustRequestObject,
 ) (DeleteLocalTrustResponseObject, error) {
 	if !server.deleteStoredLocalTrust(request.Id) {
 		return DeleteLocalTrust404Response{}, nil
@@ -341,23 +357,31 @@ func (server *StrictServerImpl) DeleteLocalTrust(
 }
 
 func (server *StrictServerImpl) loadLocalTrust(
+	ctx context.Context,
 	ref *LocalTrustRef,
 ) (*sparse.Matrix, error) {
 	switch ref.Scheme {
-	case "inline":
+	case LocalTrustRefSchemeInline:
 		inline, err := ref.AsInlineLocalTrust()
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"cannot parse inline local trust reference")
+			return nil, fmt.Errorf(
+				"cannot parse inline local trust reference: %w", err)
 		}
 		return server.loadInlineLocalTrust(&inline)
-	case "stored":
+	case LocalTrustRefSchemeStored:
 		stored, err := ref.AsStoredLocalTrust()
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"cannot parse stored local trust reference")
+			return nil, fmt.Errorf(
+				"cannot parse stored local trust reference: %w", err)
 		}
 		return server.loadStoredLocalTrust(&stored)
+	case LocalTrustRefSchemeObjectstorage:
+		objectStorage, err := ref.AsObjectStorageLocalTrust()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"cannot parse object storage local trust reference: %w", err)
+		}
+		return server.loadObjectStorageLocalTrust(ctx, &objectStorage)
 	default:
 		return nil, errors.Errorf("unknown local trust ref type %#v",
 			ref.Scheme)
@@ -410,11 +434,101 @@ func (server *StrictServerImpl) loadStoredLocalTrust(
 	return c, nil
 }
 
-func loadTrustVector(ref *TrustVectorRef) (*sparse.Vector, error) {
-	if inline, err := ref.AsInlineTrustVector(); err == nil {
-		return loadInlineTrustVector(&inline)
+func (server *StrictServerImpl) loadObjectStorageLocalTrust(
+	ctx context.Context, ref *ObjectStorageLocalTrust,
+) (*sparse.Matrix, error) {
+	u, err := url.Parse(ref.Url)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse object storage URL: %w", err)
 	}
-	return nil, errors.New("unknown trust vector type")
+	switch strings.ToLower(u.Scheme) {
+	case "s3":
+		bucket := u.Host
+		path := strings.TrimPrefix(u.Path, "/")
+		return server.loadS3LocalTrust(ctx, bucket, path)
+	default:
+		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
+			u.Scheme)
+	}
+}
+
+func (server *StrictServerImpl) loadS3LocalTrust(
+	ctx context.Context, bucket string, key string,
+) (*sparse.Matrix, error) {
+	client := s3.NewFromConfig(server.awsConfig)
+	req := s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+	res, err := client.GetObject(ctx, &req)
+	if err != nil {
+		return nil, fmt.Errorf("cannot fetch from S3: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	return server.loadCsvLocalTrust(csv.NewReader(res.Body))
+}
+
+func (server *StrictServerImpl) loadCsvLocalTrust(
+	r *csv.Reader,
+) (*sparse.Matrix, error) {
+	header, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read CSV header: %w", err)
+	}
+	if !reflect.DeepEqual(header, []string{"i", "j", "v"}) {
+		return nil, fmt.Errorf("invalid CSV header %#v", header)
+	}
+	var entries []sparse.CooEntry
+	var size = 0
+	for record, err := r.Read(); err == nil; record, err = r.Read() {
+		if len(record) != 3 {
+			return nil, fmt.Errorf("invalid CSV record %#v", record)
+		}
+		i, err := strconv.Atoi(record[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid i=%#v: %w", record[0], err)
+		}
+		j, err := strconv.Atoi(record[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid j=%#v: %w", record[1], err)
+		}
+		v, err := strconv.ParseFloat(record[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid v=%#v: %w", record[2], err)
+		}
+		if size < i+1 {
+			size = i + 1
+		}
+		if size < j+1 {
+			size = j + 1
+		}
+		entries = append(entries, sparse.CooEntry{Row: i, Column: j, Value: v})
+	}
+	return sparse.NewCSRMatrix(size, size, entries), nil
+}
+
+func (server *StrictServerImpl) loadTrustVector(
+	ctx context.Context,
+	ref *TrustVectorRef,
+) (*sparse.Vector, error) {
+	switch ref.Scheme {
+	case TrustVectorRefSchemeInline:
+		inline, err := ref.AsInlineTrustVector()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"cannot parse inline trust vector reference: %w", err)
+		}
+		return loadInlineTrustVector(&inline)
+	case TrustVectorRefSchemeObjectstorage:
+		objectStorage, err := ref.AsObjectStorageTrustVector()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"cannot parse object storage trust vector reference: %w", err)
+		}
+		return server.loadObjectStorageTrustVector(ctx, &objectStorage)
+	default:
+		return nil, fmt.Errorf("unknown trust vector ref type %#v", ref.Scheme)
+	}
 }
 
 func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
@@ -434,6 +548,74 @@ func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
 	size := inline.Size
 	inline.Size = 0
 	inline.Entries = nil
+	return sparse.NewVector(size, entries), nil
+}
+
+func (server *StrictServerImpl) loadObjectStorageTrustVector(
+	ctx context.Context, ref *ObjectStorageTrustVector,
+) (*sparse.Vector, error) {
+	u, err := url.Parse(ref.Url)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse object storage URL: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "s3":
+		bucket := u.Host
+		path := strings.TrimPrefix(u.Path, "/")
+		return server.loadS3TrustVector(ctx, bucket, path)
+	default:
+		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
+			u.Scheme)
+	}
+}
+
+func (server *StrictServerImpl) loadS3TrustVector(
+	ctx context.Context, bucket string, key string,
+) (*sparse.Vector, error) {
+	client := s3.NewFromConfig(server.awsConfig)
+	req := s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+	res, err := client.GetObject(ctx, &req)
+	if err != nil {
+		return nil, fmt.Errorf("cannot fetch trust vector: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	r := csv.NewReader(res.Body)
+	return server.loadCsvTrustVector(r)
+
+}
+
+func (server *StrictServerImpl) loadCsvTrustVector(
+	r *csv.Reader,
+) (*sparse.Vector, error) {
+	header, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read CSV header: %w", err)
+	}
+	if !reflect.DeepEqual(header, []string{"i", "v"}) {
+		return nil, fmt.Errorf("invalid CSV header %#v", header)
+	}
+	var entries []sparse.Entry
+	var size = 0
+	for record, err := r.Read(); err == nil; record, err = r.Read() {
+		if len(record) != 2 {
+			return nil, fmt.Errorf("invalid CSV record %#v", record)
+		}
+		i, err := strconv.Atoi(record[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid i=%#v: %w", record[0], err)
+		}
+		v, err := strconv.ParseFloat(record[1], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid v=%#v: %w", record[1], err)
+		}
+		if size < i+1 {
+			size = i + 1
+		}
+		entries = append(entries, sparse.Entry{Index: i, Value: v})
+	}
 	return sparse.NewVector(size, entries), nil
 }
 

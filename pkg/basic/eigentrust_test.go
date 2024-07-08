@@ -3,7 +3,7 @@ package basic
 import (
 	"testing"
 
-	"github.com/magiconair/properties/assert"
+	"github.com/stretchr/testify/assert"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
