@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -21,6 +22,8 @@ var (
 		Short: "Serve the EigenTrust API",
 		Long:  `Serve the EigenTrust API.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			e := echo.New()
 			eLogger := lecho.From(logger)
 			e.Logger = eLogger
@@ -29,10 +32,13 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server := basic.NewStrictServerImpl(logger)
+			server, err := basic.NewStrictServerImpl(ctx, logger)
+			if err != nil {
+				logger.Err(err).Msg("cannot create server implementation")
+				return
+			}
 			basic.RegisterHandlersWithBaseURL(e,
 				basic.NewStrictHandler(server, nil), "/basic/v1")
-			var err error
 			if listenAddress == "" {
 				port := 80
 				if tls {

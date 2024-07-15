@@ -195,6 +195,7 @@ components:
         `id` denotes the local trust collection in question.
       name: id
       in: path
+      required: true
       schema:
         $ref: "#/components/schemas/LocalTrustId"
   schemas:
@@ -217,11 +218,13 @@ components:
               enum:
                 - inline
                 - stored
+                - objectstorage
           required:
             - scheme
         - oneOf:
             - $ref: "#/components/schemas/InlineLocalTrust"
             - $ref: "#/components/schemas/StoredLocalTrust"
+            - $ref: "#/components/schemas/ObjectStorageLocalTrust"
       examples:
         - scheme: inline
           size: 3
@@ -251,9 +254,15 @@ components:
         within the reference object itself.
       type: object
       required:
+        - scheme
         - size
         - entries
       properties:
+        scheme:
+          description: |
+            A fixed string `"inline"`.
+          type: string
+          enum: [ "inline" ]
         size:
           description: |
             Denotes the number of peers in the local trust,
@@ -320,16 +329,59 @@ components:
         Stored local trust is identified with its ID string.
       type: object
       required:
+        - scheme
         - id
       properties:
+        scheme:
+          description: |
+            A fixed string `"stored"`.
+          type: string
+          enum: [ "stored" ]
         id:
           $ref: "#/components/schemas/LocalTrustId"
+    ObjectStorageLocalTrust:
+      description: |
+        Refers to a local trust matrix in a remote object storage service.
+      type: object
+      required:
+        - scheme
+        - url
+      properties:
+        scheme:
+          description: |
+            A fixed string `"objectstorage"`.
+          type: string
+          enum: [ "objectstorage" ]
+        url:
+          description: |
+            URL of the trust matrix file.
+
+            It must refer to a CSV file, with three columns `i`, `j`, and `v`.
+            Currently the `s3://` URL scheme (AWS S3) is supported.
+          type: string
+      examples:
+        - scheme: objectstorage
+          url: s3://bucket-name/path/to/file.csv
     TrustVectorRef:
       description: |
         Refers to a trust vector.
       type: object
-      oneOf:
-        - $ref: "#/components/schemas/InlineTrustVector"
+      allOf:
+        - properties:
+            scheme:
+              title: Trust vector reference scheme.
+              description: |
+                Trust vector reference scheme, akin to URI scheme.
+              type: string
+              enum:
+                - inline
+                - stored
+                - objectstorage
+          required:
+            - scheme
+        - oneOf:
+            - $ref: "#/components/schemas/InlineTrustVector"
+            - $ref: "#/components/schemas/ObjectStorageTrustVector"
     InlineTrustVector:
       description: |
         Refers to a trust vector "inline".
@@ -402,6 +454,29 @@ components:
           v: 1.0
         - i: 2
           v: 0.5
+    ObjectStorageTrustVector:
+      description: |
+        Refers to a trust vector in a remote object storage service.
+      type: object
+      required:
+        - scheme
+        - url
+      properties:
+        scheme:
+          description: |
+            A fixed string `"objectstorage"`.
+          type: string
+          enum: [ "objectstorage" ]
+        url:
+          description: |
+            URL of the trust vector file.
+
+            It must refer to a CSV file, with two columns `i` and `v`.
+            Currently the `s3://` URL scheme (AWS S3) is supported.
+          type: string
+      examples:
+        - scheme: objectstorage
+          url: s3://bucket-name/path/to/file.csv
     FlatTailStats:
       description: Flat-tail algorithm stats and peer ranking.
       type: object
