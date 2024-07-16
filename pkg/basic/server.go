@@ -43,6 +43,12 @@ func NewStrictServerImpl(
 	}, nil
 }
 
+func (server *StrictServerImpl) GetStatus(
+	ctx context.Context, req GetStatusRequestObject,
+) (GetStatusResponseObject, error) {
+	return GetStatus200JSONResponse{ServerReadyJSONResponse{Message: "OK"}}, nil
+}
+
 type HTTPError struct {
 	Code  int
 	Inner error
