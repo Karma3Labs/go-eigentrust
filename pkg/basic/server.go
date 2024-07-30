@@ -192,8 +192,10 @@ func (server *StrictServerImpl) compute(
 		return
 	}
 	DiscountTrustVector(t, discounts)
-	var itv InlineTrustVector
-	itv.Size = t.Dim
+	itv := InlineTrustVector{
+		Scheme: InlineTrustVectorSchemeInline,
+		Size:   t.Dim,
+	}
 	for _, e := range t.Entries {
 		itv.Entries = append(itv.Entries,
 			InlineTrustVectorEntry{I: e.Index, V: e.Value})
@@ -202,7 +204,6 @@ func (server *StrictServerImpl) compute(
 		err = errors.Wrapf(err, "cannot create response")
 		return
 	}
-	tv.Scheme = TrustVectorRefSchemeInline
 	return tv, flatTailStats, nil
 }
 

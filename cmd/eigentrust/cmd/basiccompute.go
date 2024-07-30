@@ -91,7 +91,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
 			fmt.Sprintf(format, v...))
 	}
-	inline := basic.InlineLocalTrust{}
+	inline := basic.InlineLocalTrust{Scheme: basic.InlineLocalTrustSchemeInline}
 	ignoreFirst := csvHasHeader
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
@@ -146,7 +146,6 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	if err = ref.FromInlineLocalTrust(inline); err != nil {
 		return errors.Wrap(err, "cannot wrap inline local trust")
 	}
-	ref.Scheme = basic.LocalTrustRefSchemeInline
 	return nil
 }
 
@@ -201,6 +200,7 @@ func loadInlineTrustVectorCsv(
 			fmt.Sprintf(format, v...))
 	}
 	inline := basic.InlineTrustVector{
+		Scheme:  basic.InlineTrustVectorSchemeInline,
 		Entries: nil,
 		Size:    0,
 	}
@@ -250,7 +250,6 @@ func loadInlineTrustVectorCsv(
 	if err = ref.FromInlineTrustVector(inline); err != nil {
 		return errors.Wrap(err, "cannot wrap inline trust vector")
 	}
-	ref.Scheme = basic.TrustVectorRefSchemeInline
 	return nil
 }
 
