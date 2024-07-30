@@ -44,7 +44,7 @@ func NewStrictServerImpl(
 }
 
 func (server *StrictServerImpl) GetStatus(
-	ctx context.Context, req GetStatusRequestObject,
+	context.Context, GetStatusRequestObject,
 ) (GetStatusResponseObject, error) {
 	return GetStatus200JSONResponse{ServerReadyJSONResponse{Message: "OK"}}, nil
 }
