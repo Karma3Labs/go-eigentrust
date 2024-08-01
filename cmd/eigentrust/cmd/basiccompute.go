@@ -41,6 +41,7 @@ var (
 	rawPeerIds            bool
 	peerIds               []string
 	peerIndices           map[string]int
+	printRequest          bool
 )
 
 func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
@@ -342,6 +343,17 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if maxIterations > 0 {
 		requestBody.MaxIterations = &maxIterations
 	}
+	if printRequest {
+		req := struct {
+			Body    *basic.ComputeWithStatsJSONRequestBody `json:"body"`
+			PeerIds []string                               `json:"peerIds"`
+		}{&requestBody, peerIds}
+		err = json.NewEncoder(os.Stdout).Encode(req)
+		if err != nil {
+			logger.Err(err).Msg("cannot encode/print the request body")
+		}
+		return
+	}
 	resp, err := client.ComputeWithStatsWithResponse(ctx, requestBody)
 	if err != nil {
 		logger.Err(err).Msg("request failed")
@@ -444,5 +456,7 @@ for flat-tail algorithm and stats.
 	basicComputeCmd.Flags().BoolVar(&rawPeerIds, "raw-peer-ids", false,
 		`Whether to use truster/trustee in input CSV directly as peer indices
 (default: false)`)
+	basicComputeCmd.Flags().BoolVar(&printRequest, "print-request", false,
+		`Print the compute request JSON body and exit`)
 	peerIndices = make(map[string]int)
 }
