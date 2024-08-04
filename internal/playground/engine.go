@@ -172,7 +172,10 @@ func calculate(gc *gin.Context) error {
 	if err != nil {
 		return fmt.Errorf("cannot compute EigenTrust scores: %w", err)
 	}
-	basic.DiscountTrustVector(trustScores, discounts)
+	err = basic.DiscountTrustVector(trustScores, discounts)
+	if err != nil {
+		return fmt.Errorf("cannot apply local trust discounts: %w", err)
+	}
 
 	getPeerName := func(i int) string {
 		if hasPeerNames {

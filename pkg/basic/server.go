@@ -191,7 +191,10 @@ func (server *StrictServerImpl) compute(
 		err = fmt.Errorf("cannot compute EigenTrust: %w", err)
 		return
 	}
-	DiscountTrustVector(t, discounts)
+	if err = DiscountTrustVector(t, discounts); err != nil {
+		err = fmt.Errorf("cannot apply local trust discounts: %w", err)
+		return
+	}
 	itv := InlineTrustVector{
 		Scheme: InlineTrustVectorSchemeInline,
 		Size:   t.Dim,

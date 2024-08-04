@@ -201,7 +201,7 @@ func Compute(
 // and subtracting the scaled discount row from the global trust vector.
 //
 // The caller shall ensure that the discounts vector is canonicalized.
-func DiscountTrustVector(t *sparse.Vector, discounts *sparse.Matrix) {
+func DiscountTrustVector(t *sparse.Vector, discounts *sparse.Matrix) error {
 	// t is adjusted in place, so take the unadjusted clone for discount weight.
 	i1 := 0
 	t1 := t.Clone()
@@ -234,7 +234,10 @@ DiscountsLoop:
 			Dim:     t.Dim,
 			Entries: distrusts,
 		})
-		t.SubVec(t, scaledDistrustVec)
+		if err := t.SubVec(t, scaledDistrustVec); err != nil {
+			return err
+		}
 		i1++
 	}
+	return nil
 }
