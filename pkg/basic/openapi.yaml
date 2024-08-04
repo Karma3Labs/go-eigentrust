@@ -594,6 +594,23 @@ components:
                   0 means no limit.
                 type: integer
                 minimum: 0
+              minIterations:
+                description: |
+                  The minimum number of iterations to perform
+                  even if other termination criteria are met.
+                  Defaults to checkFreq, which in turn defaults to 1.
+                type: integer
+                minimum: 1
+              checkFreq:
+                description: |
+                  If given (n), exit criteria are checked every n iterations.
+                  It can be used in conjunction with minIterations
+                  for "modulo n" behavior,
+                  e.g. with minIterations=7 and checkFreq=5
+                  exit criteria are checked after 7/12/17/... iterations.
+                  Default is 1: exit criteria are checked after every iteration.
+                type: integer
+                minimum: 1
           examples:
             Simple1:
               summary: Simple 3-peer example

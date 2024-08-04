@@ -9,7 +9,9 @@ type ComputeOpts struct {
 	flatTailLength int
 	numLeaders     int
 	flatTailStats  *FlatTailStats
-	maxIterations  int
+	maxIterations  *int
+	minIterations  *int
+	checkFreq      *int
 }
 
 // ComputeOpt is one Compute option.
@@ -57,7 +59,34 @@ func WithFlatTailStats(stats *FlatTailStats) ComputeOpt {
 
 // WithMaxIterations tells Compute to iterate at most n times,
 // even if the other termination criteria are not met.
+//
 // 0 means unlimited.
 func WithMaxIterations(n int) ComputeOpt {
-	return func(o *ComputeOpts) { o.maxIterations = n }
+	return func(o *ComputeOpts) { o.maxIterations = &n }
+}
+
+// WithMinIterations tells Compute to iterate at least n times,
+// even if the other termination criteria are met.
+//
+// Defaults to the same as the exit criteria check frequency (WithCheckFreq).
+func WithMinIterations(n int) ComputeOpt {
+	return func(o *ComputeOpts) { o.minIterations = &n }
+}
+
+// WithIterations tells Compute to iterate exactly n times,
+// regardless of other termination criteria.
+func WithIterations(n int) ComputeOpt {
+	return func(o *ComputeOpts) { o.maxIterations, o.minIterations = &n, &n }
+}
+
+// WithCheckFreq tells Compute to perform exit criteria checks
+// every n iterations.
+//
+// It can be used in conjunction with WithMinIterations for "modulo n" behavior,
+// e.g. WithMinIterations(7) and WithCheckFreq(5) causes exit criteria checks
+// after 7/12/17/22/27/... iterations.
+//
+// Defaults to 1: exit criteria are checked after every iteration.
+func WithCheckFreq(n int) ComputeOpt {
+	return func(o *ComputeOpts) { o.checkFreq = &n }
 }

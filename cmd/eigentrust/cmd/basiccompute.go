@@ -37,6 +37,8 @@ var (
 	outputFilename        string
 	flatTailStatsFilename string
 	maxIterations         int
+	minIterations         int
+	checkFreq             int
 	csvHasHeader          bool
 	rawPeerIds            bool
 	peerIds               []string
@@ -342,6 +344,13 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if maxIterations > 0 {
 		requestBody.MaxIterations = &maxIterations
 	}
+	// default minIterations==-1 lets server choose default (same as checkFreq)
+	if minIterations >= 0 {
+		requestBody.MinIterations = &minIterations
+	}
+	if checkFreq > 1 {
+		requestBody.CheckFreq = &checkFreq
+	}
 	if printRequest {
 		req := struct {
 			Body    *basic.ComputeWithStatsJSONRequestBody `json:"body"`
@@ -450,6 +459,10 @@ for flat-tail algorithm and stats.
 "" (default) suppresses output; "-" uses standard output`)
 	basicComputeCmd.Flags().IntVar(&maxIterations, "max-iterations", 0,
 		`Maximum number of iterations. 0 (default) means unlimited`)
+	basicComputeCmd.Flags().IntVar(&minIterations, "min-iterations", -1,
+		`Minimum number of iterations (default: same as --check-freq)`)
+	basicComputeCmd.Flags().IntVar(&checkFreq, "check-freq", 1,
+		`Exit criteria check frequency, in number of iterations (default: 1)`)
 	basicComputeCmd.Flags().BoolVar(&csvHasHeader, "csv-header", true,
 		`Whether input CSV has a header line (default: true)`)
 	basicComputeCmd.Flags().BoolVar(&rawPeerIds, "raw-peer-ids", false,

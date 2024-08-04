@@ -49,6 +49,9 @@ func Canonicalize(entries []sparse.Entry) error {
 //
 // Compute terminates EigenTrust iterations when the trust vector converges,
 // i.e. the Frobenius norm of trust vector delta falls below epsilon threshold.
+// The convergence check is done by default every iteration;
+// WithMaxIterations, WithMinIterations, and WithCheckFreq changes the timing.
+//
 // Also see WithFlatTail for an additional/alternative termination criterion
 // based upon ranking stability.
 func Compute(
@@ -110,10 +113,43 @@ func Compute(
 	flatTailStats.Threshold = 1
 	flatTailStats.DeltaNorm = 1
 	flatTailStats.Ranking = nil
+	checkFreq := 1
+	if o.checkFreq != nil {
+		checkFreq = *o.checkFreq
+	}
+	if checkFreq < 1 {
+		return nil, fmt.Errorf("checkFreq=%d must be positive", checkFreq)
+	}
+	maxIters := 0
+	if o.maxIterations != nil {
+		maxIters = *o.maxIterations
+	}
+	if maxIters < 0 {
+		return nil, fmt.Errorf(
+			"maxIters=%d must be either 0 (unlimited) or positive", maxIters)
+	}
+	if maxIters == 0 {
+		maxIters = math.MaxInt
+	}
+	minIters := checkFreq
+	if o.minIterations != nil {
+		minIters = *o.minIterations
+	}
+	if minIters <= 0 {
+		return nil, fmt.Errorf("minIters=%d must be at least 1", minIters)
+	}
+	// hard-cap at maxIters
 	iter := 0
-	for ; d > e || (flatTailStats.Length < flatTail); iter++ {
-		if o.maxIterations > 0 && iter >= o.maxIterations {
-			break
+	for ; iter < maxIters; iter++ {
+		// check exit criteria,
+		// first at minIters then every checkFreq iterations afterward.
+		if iter >= minIters && (iter-minIters)%checkFreq == 0 {
+			converged := d <= e
+			flatTailReached := flatTailStats.Length >= flatTail
+			if converged && flatTailReached {
+				// both criteria met
+				break
+			}
 		}
 		select {
 		case <-ctx.Done():

@@ -67,7 +67,7 @@ func (server *StrictServerImpl) compute(
 	initialTrust *TrustVectorRef, preTrust *TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
-	maxIterations *int,
+	maxIterations *int, minIterations *int, checkFreq *int,
 ) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
 	logger := server.logger.With().
 		Str("func", "(*StrictServerImpl).Compute").
@@ -157,6 +157,12 @@ func (server *StrictServerImpl) compute(
 	}
 	if maxIterations != nil {
 		opts = append(opts, WithMaxIterations(*maxIterations))
+	}
+	if minIterations != nil {
+		opts = append(opts, WithMinIterations(*minIterations))
+	}
+	if checkFreq != nil {
+		opts = append(opts, WithCheckFreq(*checkFreq))
 	}
 	CanonicalizeTrustVector(p)
 	if t0 != nil {
