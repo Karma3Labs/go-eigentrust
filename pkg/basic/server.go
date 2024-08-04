@@ -214,12 +214,12 @@ func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
 	ctx = server.logger.WithContext(ctx)
+	req := request.Body
+
 	tv, _, err := server.compute(ctx,
-		&request.Body.LocalTrust,
-		request.Body.InitialTrust, request.Body.PreTrust,
-		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders,
-		request.Body.MaxIterations)
+		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
+		req.FlatTail, req.NumLeaders,
+		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
 		if httpError, ok := err.(HTTPError); ok {
 			switch httpError.Code {
@@ -238,12 +238,11 @@ func (server *StrictServerImpl) ComputeWithStats(
 	ctx context.Context, request ComputeWithStatsRequestObject,
 ) (ComputeWithStatsResponseObject, error) {
 	ctx = server.logger.WithContext(ctx)
+	req := request.Body
 	tv, flatTailStats, err := server.compute(ctx,
-		&request.Body.LocalTrust,
-		request.Body.InitialTrust, request.Body.PreTrust,
-		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders,
-		request.Body.MaxIterations)
+		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
+		req.FlatTail, req.NumLeaders,
+		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
 		if httpError, ok := err.(HTTPError); ok {
 			switch httpError.Code {
