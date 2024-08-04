@@ -154,7 +154,7 @@ func mergeSpan(s1, s2 []Entry) []Entry {
 // m2 is reset after merge.
 func (m *CSMatrix) Merge(m2 *CSMatrix) {
 	// Load m2 back into memory, we are about to merge/reuse its spans in m.
-	m2.Munmap()
+	_ = m2.Munmap()
 
 	m.SetMajorDim(max(m.MajorDim, m2.MajorDim)) // also resizes m.Entries
 	m.SetMinorDim(max(m.MinorDim, m2.MinorDim))

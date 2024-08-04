@@ -259,7 +259,7 @@ func writeOutput(
 	if err != nil {
 		return fmt.Errorf("cannot open output file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	csvWriter := csv.NewWriter(file)
 	for _, entry := range entries {
 		var peerId string
@@ -287,7 +287,7 @@ func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
 		return fmt.Errorf("cannot open flat-tail stats file for writing: %w",
 			err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	jsonEncoder := json.NewEncoder(file)
 	if err := jsonEncoder.Encode(stats); err != nil {
 		return err
