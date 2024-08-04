@@ -50,7 +50,7 @@ func (s *KBNSummer) Add(value float64) {
 	// That error can in turn be compensated further by introducing
 	// a second-order compensation, that is,
 	// "compensation of errors in `compensation` summation".
-	// In general we can repeat this for even higher orders
+	// In general, we can repeat this for even higher orders
 	// until we achieve desired accuracy
 	// (generalized Kahan-Babushka summation, aka Kahan-Babushka-Klein).
 }
