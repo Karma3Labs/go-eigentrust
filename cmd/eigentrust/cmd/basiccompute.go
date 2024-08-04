@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -12,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k3l.io/go-eigentrust/pkg/basic"
 	"k3l.io/go-eigentrust/pkg/util"
@@ -57,8 +57,7 @@ func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
 		}
 		return loadInlineLocalTrust(path, ref)
 	default:
-		return errors.Errorf("invalid local trust URI scheme %#v",
-			parsed.Scheme)
+		return fmt.Errorf("invalid local trust URI scheme %#v", parsed.Scheme)
 	}
 }
 
@@ -69,7 +68,7 @@ func loadInlineLocalTrust(filename string, ref *basic.LocalTrustRef) error {
 	case ".csv":
 		return loadInlineLocalTrustCsv(filename, ref)
 	default:
-		return errors.Errorf("invalid local trust file type %#v", ext)
+		return fmt.Errorf("invalid local trust file type %#v", ext)
 	}
 }
 
@@ -82,15 +81,15 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	reader := csv.NewReader(f)
 	inputErrorf := func(field int, format string, v ...interface{}) error {
 		line, column := reader.FieldPos(0)
-		return errors.Errorf("%s:%d:%d: %s", filename, line, column,
-			fmt.Sprintf(format, v...))
+		return fmt.Errorf("%s:%d:%d: %s",
+			filename, line, column, fmt.Sprintf(format, v...))
 	}
 	inputWrapf := func(
 		err error, field int, format string, v ...interface{},
 	) error {
 		line, column := reader.FieldPos(0)
-		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
-			fmt.Sprintf(format, v...))
+		return fmt.Errorf("%s:%d:%d: %s: %s",
+			filename, line, column, fmt.Sprintf(format, v...), err)
 	}
 	inline := basic.InlineLocalTrust{Scheme: basic.InlineLocalTrustSchemeInline}
 	ignoreFirst := csvHasHeader
@@ -142,10 +141,10 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		return errors.New("empty local trust")
 	}
 	if err != io.EOF {
-		return errors.Wrapf(err, "cannot read local trust CSV %#v", filename)
+		return fmt.Errorf("cannot read local trust CSV %#v: %w", filename, err)
 	}
 	if err = ref.FromInlineLocalTrust(inline); err != nil {
-		return errors.Wrap(err, "cannot wrap inline local trust")
+		return fmt.Errorf("cannot wrap inline local trust: %w", err)
 	}
 	return nil
 }
@@ -163,8 +162,7 @@ func trustVectorURIToRef(uri string, ref *basic.TrustVectorRef) error {
 		}
 		return loadInlineTrustVector(path, ref)
 	default:
-		return errors.Errorf("invalid trust vector URI scheme %#v",
-			parsed.Scheme)
+		return fmt.Errorf("invalid trust vector URI scheme %#v", parsed.Scheme)
 	}
 }
 
@@ -175,7 +173,7 @@ func loadInlineTrustVector(filename string, ref *basic.TrustVectorRef) error {
 	case ".csv":
 		return loadInlineTrustVectorCsv(filename, ref)
 	default:
-		return errors.Errorf("invalid trust vector file type %#v", ext)
+		return fmt.Errorf("invalid trust vector file type %#v", ext)
 	}
 }
 
@@ -190,15 +188,15 @@ func loadInlineTrustVectorCsv(
 	reader := csv.NewReader(f)
 	inputErrorf := func(field int, format string, v ...interface{}) error {
 		line, column := reader.FieldPos(0)
-		return errors.Errorf("%s:%d:%d: %s", filename, line, column,
-			fmt.Sprintf(format, v...))
+		return fmt.Errorf("%s:%d:%d: %s",
+			filename, line, column, fmt.Sprintf(format, v...))
 	}
 	inputWrapf := func(
 		err error, field int, format string, v ...interface{},
 	) error {
 		line, column := reader.FieldPos(0)
-		return errors.Wrapf(err, "%s:%d:%d: %s", filename, line, column,
-			fmt.Sprintf(format, v...))
+		return fmt.Errorf("%s:%d:%d: %s: %w", filename, line, column,
+			fmt.Sprintf(format, v...), err)
 	}
 	inline := basic.InlineTrustVector{
 		Scheme:  basic.InlineTrustVectorSchemeInline,
@@ -246,10 +244,10 @@ func loadInlineTrustVectorCsv(
 		return errors.New("empty trust vector")
 	}
 	if err != io.EOF {
-		return errors.Wrapf(err, "cannot read trust vector CSV %#v", filename)
+		return fmt.Errorf("cannot read trust vector CSV %#v: %w", filename, err)
 	}
 	if err = ref.FromInlineTrustVector(inline); err != nil {
-		return errors.Wrap(err, "cannot wrap inline trust vector")
+		return fmt.Errorf("cannot wrap inline trust vector: %w", err)
 	}
 	return nil
 }
@@ -259,7 +257,7 @@ func writeOutput(
 ) error {
 	file, err := util.OpenOutputFile(filename)
 	if err != nil {
-		return errors.Wrap(err, "cannot open output file")
+		return fmt.Errorf("cannot open output file: %w", err)
 	}
 	defer file.Close()
 	csvWriter := csv.NewWriter(file)
@@ -278,7 +276,7 @@ func writeOutput(
 	}
 	csvWriter.Flush()
 	if csvWriter.Error() != nil {
-		return errors.Wrap(err, "cannot flush output file")
+		return fmt.Errorf("cannot flush output file: %w", err)
 	}
 	return nil
 }
@@ -286,7 +284,8 @@ func writeOutput(
 func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
 	file, err := util.OpenOutputFile(filename)
 	if err != nil {
-		return errors.Wrapf(err, "cannot open flat-tail stats file for writing")
+		return fmt.Errorf("cannot open flat-tail stats file for writing: %w",
+			err)
 	}
 	defer file.Close()
 	jsonEncoder := json.NewEncoder(file)
@@ -408,7 +407,7 @@ func getPeerId(peerIndex int) (peerId string, err error) {
 	} else if peerIndex < len(peerIds) {
 		peerId = peerIds[peerIndex]
 	} else {
-		err = errors.Errorf("unknown peer index %d", peerIndex)
+		err = fmt.Errorf("unknown peer index %d", peerIndex)
 	}
 	return
 }

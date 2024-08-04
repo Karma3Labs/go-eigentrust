@@ -4,6 +4,7 @@ import "C"
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,7 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mohae/deepcopy"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
@@ -79,7 +79,7 @@ func (server *StrictServerImpl) compute(
 	)
 	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
 	if c, err = server.loadLocalTrust(ctx, localTrustRef); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load local trust")}
+		err = HTTPError{400, fmt.Errorf("cannot load local trust: %w", err)}
 		return
 	}
 	cDim, err := c.Dim()
@@ -94,7 +94,7 @@ func (server *StrictServerImpl) compute(
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
 	} else if p, err = server.loadTrustVector(ctx, preTrust); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load pre-trust")}
+		err = HTTPError{400, fmt.Errorf("cannot load pre-trust: %w", err)}
 		return
 	} else {
 		// align dimensions
@@ -113,7 +113,7 @@ func (server *StrictServerImpl) compute(
 	if initialTrust == nil {
 		t0 = nil
 	} else if t0, err = server.loadTrustVector(ctx, initialTrust); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load initial trust")}
+		err = HTTPError{400, fmt.Errorf("cannot load initial trust: %w", err)}
 		return
 	} else {
 		// align dimensions
@@ -136,7 +136,7 @@ func (server *StrictServerImpl) compute(
 		alpha = &a
 	} else if *alpha < 0 || *alpha > 1 {
 		err = HTTPError{
-			400, errors.Errorf("alpha=%f out of range [0..1]", *alpha),
+			400, fmt.Errorf("alpha=%f out of range [0..1]", *alpha),
 		}
 		return
 	}
@@ -145,7 +145,7 @@ func (server *StrictServerImpl) compute(
 		epsilon = &e
 	} else if *epsilon <= 0 || *epsilon > 1 {
 		err = HTTPError{
-			400, errors.Errorf("epsilon=%f out of range (0..1]", *epsilon),
+			400, fmt.Errorf("epsilon=%f out of range (0..1]", *epsilon),
 		}
 		return
 	}
@@ -165,21 +165,21 @@ func (server *StrictServerImpl) compute(
 	discounts, err := ExtractDistrust(c)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot extract discounts"),
+			400, fmt.Errorf("cannot extract discounts: %w", err),
 		}
 		return
 	}
 	err = CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot canonicalize local trust"),
+			400, fmt.Errorf("cannot canonicalize local trust: %w", err),
 		}
 		return
 	}
 	err = CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot canonicalize discounts"),
+			400, fmt.Errorf("cannot canonicalize discounts: %w", err),
 		}
 		return
 	}
@@ -188,7 +188,7 @@ func (server *StrictServerImpl) compute(
 	p = nil
 	runtime.GC()
 	if err != nil {
-		err = errors.Wrapf(err, "cannot compute EigenTrust")
+		err = fmt.Errorf("cannot compute EigenTrust: %w", err)
 		return
 	}
 	DiscountTrustVector(t, discounts)
@@ -201,7 +201,7 @@ func (server *StrictServerImpl) compute(
 			InlineTrustVectorEntry{I: e.Index, V: e.Value})
 	}
 	if err = tv.FromInlineTrustVector(itv); err != nil {
-		err = errors.Wrapf(err, "cannot create response")
+		err = fmt.Errorf("cannot create response: %w", err)
 		return
 	}
 	return tv, flatTailStats, nil
@@ -288,7 +288,7 @@ func (server *StrictServerImpl) getLocalTrust(
 	}
 	cDim, err := c.Dim()
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get dimension")
+		return nil, fmt.Errorf("cannot get dimension: %w", err)
 	}
 	entries := make([]InlineLocalTrustEntry, 0, c.NNZ())
 	for i, row := range c.Entries {
@@ -327,11 +327,13 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Logger()
 	c, err := server.loadLocalTrust(ctx, request.Body)
 	if err != nil {
-		return nil, HTTPError{400, errors.Wrap(err, "cannot load local trust")}
+		return nil, HTTPError{
+			400, fmt.Errorf("cannot load local trust: %w", err),
+		}
 	}
 	cDim, err := c.Dim()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot get dimension")
+		return nil, fmt.Errorf("cannot get dimension: %w", err)
 	}
 	logger.Trace().
 		Int("dim", cDim).
@@ -390,8 +392,7 @@ func (server *StrictServerImpl) loadLocalTrust(
 		}
 		return server.loadObjectStorageLocalTrust(ctx, &objectStorage)
 	default:
-		return nil, errors.Errorf("unknown local trust ref type %#v",
-			ref.Scheme)
+		return nil, fmt.Errorf("unknown local trust ref type %#v", ref.Scheme)
 	}
 }
 
@@ -399,16 +400,16 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 	inline *InlineLocalTrust,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
-		return nil, errors.Errorf("invalid size=%#v", inline.Size)
+		return nil, fmt.Errorf("invalid size=%#v", inline.Size)
 	}
 	var entries []sparse.CooEntry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
-			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
 				idx, entry.I, inline.Size)
 		}
 		if entry.J < 0 || entry.J >= inline.Size {
-			return nil, errors.Errorf("entry %d: j=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: j=%d is out of range [0..%d)",
 				idx, entry.J, inline.Size)
 		}
 		entries = append(entries, sparse.CooEntry{
@@ -542,11 +543,11 @@ func loadInlineTrustVector(inline *InlineTrustVector) (*sparse.Vector, error) {
 	var entries []sparse.Entry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
-			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
 				idx, entry.I, inline.Size)
 		}
 		if entry.V <= 0 {
-			return nil, errors.Errorf("entry %d: v=%f is out of range (0, inf)",
+			return nil, fmt.Errorf("entry %d: v=%f is out of range (0, inf)",
 				idx, entry.V)
 		}
 		entries = append(entries, sparse.Entry{Index: entry.I, Value: entry.V})

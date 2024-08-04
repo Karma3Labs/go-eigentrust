@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -201,11 +200,11 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	}
 	nnz := m.NNZ()
 	if int(uintptr(nnz)) != nnz {
-		return errors.Errorf("matrix too big (%#v entries)", nnz)
+		return fmt.Errorf("matrix too big (%#v entries)", nnz)
 	}
 	size := unsafe.Sizeof(Entry{}) * uintptr(nnz)
 	if uintptr(int(size)) != size || int64(size) < 0 {
-		return errors.Errorf("matrix data too big (%#v bytes)", size)
+		return fmt.Errorf("matrix data too big (%#v bytes)", size)
 	}
 	tmpdir := os.Getenv("TMPDIR")
 	if tmpdir == "" {

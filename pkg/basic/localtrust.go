@@ -1,9 +1,10 @@
 package basic
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
-	"github.com/pkg/errors"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
@@ -85,12 +86,12 @@ func ReadLocalTrustFromCsv(
 			err = errors.New("too few fields")
 		} else if from, err = ParsePeerId(fields[0],
 			peerIndices); err != nil {
-			err = errors.Wrapf(err, "invalid from %#v", fields[0])
+			err = fmt.Errorf("invalid from %#v: %w", fields[0], err)
 		} else if to, err = ParsePeerId(fields[1], peerIndices); err != nil {
-			err = errors.Wrapf(err, "invalid to %#v", fields[1])
+			err = fmt.Errorf("invalid to %#v: %w", fields[1], err)
 		} else if len(fields) >= 3 {
 			if level, err = ParseTrustLevel(fields[2]); err != nil {
-				err = errors.Wrapf(err, "invalid trust level %#v", fields[2])
+				err = fmt.Errorf("invalid trust level %#v: %w", fields[2], err)
 			}
 		} else {
 			level = 1.0
@@ -105,8 +106,8 @@ func ReadLocalTrustFromCsv(
 		count++
 		from, to, level, err := parseFields(fields)
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"cannot parse local trust CSV record #%d", count)
+			return nil, fmt.Errorf(
+				"cannot parse local trust CSV record #%d: %w", count, err)
 		}
 		if maxFrom < from {
 			maxFrom = from
@@ -121,8 +122,8 @@ func ReadLocalTrustFromCsv(
 		})
 	}
 	if err != io.EOF {
-		return nil, errors.Wrapf(err,
-			"cannot read local trust CSV record #%d", count+1)
+		return nil, fmt.Errorf(
+			"cannot read local trust CSV record #%d: %w", count+1, err)
 	}
 	maxIndex := maxFrom
 	if maxIndex < maxTo {

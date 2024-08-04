@@ -2,6 +2,7 @@ package playground
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"k3l.io/go-eigentrust/pkg/sparse"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 )
 
 type Entry struct {
@@ -56,22 +56,22 @@ func calculate(gc *gin.Context) error {
 	case nil:
 		hasPeerNames = true
 	default:
-		return errors.Wrapf(err, "cannot read peerNamesFile input")
+		return fmt.Errorf("cannot read peerNamesFile input: %w", err)
 	}
 	localTrustFile, err := gc.FormFile("localTrustFile")
 	if err != nil {
-		return errors.Wrapf(err, "cannot read localTrustFile input")
+		return fmt.Errorf("cannot read localTrustFile input: %w", err)
 	}
 	preTrustFile, err := gc.FormFile("preTrustFile")
 	if err != nil {
-		return errors.Wrapf(err, "cannot read preTrustFile input")
+		return fmt.Errorf("cannot read preTrustFile input: %w", err)
 	}
 	hunchPercentStr := gc.DefaultPostForm("hunchPercent", "10")
 	hunchPercent, err := strconv.Atoi(hunchPercentStr)
 	if err != nil {
-		return errors.Wrapf(err, "invalid hunch percent %#v", hunchPercentStr)
+		return fmt.Errorf("invalid hunch percent %#v: %w", hunchPercentStr, err)
 	} else if hunchPercent < 0 || hunchPercent > 100 {
-		return errors.Errorf("hunch percent %#v out of range [0..100]",
+		return fmt.Errorf("hunch percent %#v out of range [0..100]",
 			hunchPercent)
 	}
 	var (
@@ -83,36 +83,36 @@ func calculate(gc *gin.Context) error {
 	if hasPeerNames {
 		f, err := peerNamesFile.Open()
 		if err != nil {
-			return errors.Wrap(err, "cannot open peer names file")
+			return fmt.Errorf("cannot open peer names file: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		peerNames, peerIndices, err = basic.ReadPeerNamesFromCsv(csv.NewReader(f))
 		if err != nil {
-			return errors.Wrap(err, "cannot read peer names file")
+			return fmt.Errorf("cannot read peer names file: %w", err)
 		}
 	}
 	{
 		f, err := localTrustFile.Open()
 		if err != nil {
-			return errors.Wrap(err, "cannot open local trust file")
+			return fmt.Errorf("cannot open local trust file: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		localTrust, err = basic.ReadLocalTrustFromCsv(csv.NewReader(f),
 			peerIndices)
 		if err != nil {
-			return errors.Wrap(err, "cannot read local trust file")
+			return fmt.Errorf("cannot read local trust file: %w", err)
 		}
 	}
 	{
 		f, err := preTrustFile.Open()
 		if err != nil {
-			return errors.Wrap(err, "cannot open personal trust file")
+			return fmt.Errorf("cannot open personal trust file: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		preTrust, err = basic.ReadTrustVectorFromCsv(csv.NewReader(f),
 			peerIndices)
 		if err != nil {
-			return errors.Wrap(err, "cannot read personal trust file")
+			return fmt.Errorf("cannot read personal trust file: %w", err)
 		}
 	}
 	ltDim, err := localTrust.Dim()
@@ -157,20 +157,20 @@ func calculate(gc *gin.Context) error {
 	basic.CanonicalizeTrustVector(preTrust)
 	discounts, err := basic.ExtractDistrust(localTrust)
 	if err != nil {
-		return errors.Wrap(err, "cannot extract discounts")
+		return fmt.Errorf("cannot extract discounts: %w", err)
 	}
 	err = basic.CanonicalizeLocalTrust(localTrust, preTrust)
 	if err != nil {
-		return errors.Wrap(err, "cannot canonicalize local trust")
+		return fmt.Errorf("cannot canonicalize local trust: %w", err)
 	}
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot canonicalize discounts")
+		return fmt.Errorf("cannot canonicalize discounts: %w", err)
 	}
 	trustScores, err := basic.Compute(gc.Request.Context(),
 		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15)
 	if err != nil {
-		return errors.Wrap(err, "cannot compute EigenTrust scores")
+		return fmt.Errorf("cannot compute EigenTrust scores: %w", err)
 	}
 	basic.DiscountTrustVector(trustScores, discounts)
 

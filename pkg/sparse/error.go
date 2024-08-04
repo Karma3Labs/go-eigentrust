@@ -1,6 +1,6 @@
 package sparse
 
-import "github.com/pkg/errors"
+import "errors"
 
 // ErrZeroSum signals that an input vector's components sum to zero.
 var ErrZeroSum = errors.New("zero sum")

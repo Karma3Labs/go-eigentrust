@@ -3,12 +3,13 @@ package basic
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"runtime"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
@@ -79,10 +80,10 @@ func Compute(
 		return nil, sparse.ErrDimensionMismatch
 	}
 	if a < 0 || a > 1 {
-		return nil, errors.Errorf("hunch %#v out of range [0..1]", a)
+		return nil, fmt.Errorf("hunch %#v out of range [0..1]", a)
 	}
 	if e <= 0 {
-		return nil, errors.Errorf("epsilon %#v is not positive", e)
+		return nil, fmt.Errorf("epsilon %#v is not positive", e)
 	}
 	if numLeaders == 0 {
 		numLeaders = n
