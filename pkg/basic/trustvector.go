@@ -13,7 +13,7 @@ import (
 // or makes it a uniform vector that sums to one
 // if the receiver is a zero vector.
 func CanonicalizeTrustVector(v *sparse.Vector) {
-	if Canonicalize(v.Entries) == sparse.ErrZeroSum {
+	if errors.Is(Canonicalize(v.Entries), sparse.ErrZeroSum) {
 		v.Entries = make([]sparse.Entry, v.Dim)
 		c := 1 / float64(v.Dim)
 		for i := range v.Entries {

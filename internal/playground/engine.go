@@ -50,10 +50,10 @@ func index(gc *gin.Context) error {
 func calculate(gc *gin.Context) error {
 	var hasPeerNames bool
 	peerNamesFile, err := gc.FormFile("peerNamesFile")
-	switch err {
-	case http.ErrMissingFile:
+	switch {
+	case errors.Is(err, http.ErrMissingFile):
 		hasPeerNames = false
-	case nil:
+	case err == nil:
 		hasPeerNames = true
 	default:
 		return fmt.Errorf("cannot read peerNamesFile input: %w", err)

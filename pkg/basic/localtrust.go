@@ -29,9 +29,10 @@ func CanonicalizeLocalTrust(
 	}
 	for i := 0; i < n; i++ {
 		inRow := localTrust.RowVector(i)
-		switch err := Canonicalize(inRow.Entries); err {
-		case nil:
-		case sparse.ErrZeroSum:
+		err := Canonicalize(inRow.Entries)
+		switch {
+		case err == nil:
+		case errors.Is(err, sparse.ErrZeroSum):
 			if preTrust != nil {
 				localTrust.SetRowVector(i, preTrust)
 			}

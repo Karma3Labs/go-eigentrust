@@ -221,7 +221,8 @@ func (server *StrictServerImpl) Compute(
 		req.FlatTail, req.NumLeaders,
 		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
 				var resp Compute400JSONResponse
@@ -244,7 +245,8 @@ func (server *StrictServerImpl) ComputeWithStats(
 		req.FlatTail, req.NumLeaders,
 		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
 				var resp ComputeWithStats400JSONResponse
@@ -268,7 +270,8 @@ func (server *StrictServerImpl) GetLocalTrust(
 ) (GetLocalTrustResponseObject, error) {
 	inline, err := server.getLocalTrust(ctx, request.Id)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 404:
 				return GetLocalTrust404Response{}, nil
