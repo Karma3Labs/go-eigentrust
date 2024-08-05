@@ -37,6 +37,128 @@ func Canonicalize(entries []sparse.Entry) error {
 	return nil
 }
 
+// ConvergenceChecker checks for convergence of trust vector series.
+//
+// Create one with NewConvergenceChecker, then for each check,
+// call Update() followed by Converged() to determine convergence.
+type ConvergenceChecker struct {
+	iter   int
+	t      sparse.Vector
+	d      float64
+	e      float64
+	logger *zerolog.Logger
+}
+
+// NewConvergenceChecker creates a new convergence checker.
+//
+// t0 is the initial trust vector; e is the epsilon (convergence threshold).
+func NewConvergenceChecker(
+	t0 *sparse.Vector, e float64, logger *zerolog.Logger,
+) ConvergenceChecker {
+	c := ConvergenceChecker{
+		iter:   0,
+		d:      2 * e, // initial sentinel
+		e:      e,
+		logger: logger,
+	}
+	c.t.Assign(t0)
+	return c
+}
+
+// Update updates the checker with another iteration of trust vector.
+func (c *ConvergenceChecker) Update(t *sparse.Vector) error {
+	td := sparse.Vector{}
+	if err := td.SubVec(t, &c.t); err != nil {
+		return err
+	}
+	d := td.Norm2()
+	c.logger.Trace().
+		Int("iteration", c.iter).
+		Float64("log10dPace", math.Log10(d/c.d)).
+		Float64("log10dRemaining", math.Log10(d/c.e)).
+		Msg("one iteration")
+	c.t.Assign(t)
+	c.d = d
+	c.iter += 1
+	return nil
+}
+
+// Converged returns true iff the last updated vector has converged.
+func (c *ConvergenceChecker) Converged() bool { return c.d <= c.e }
+
+// Delta returns the delta computed as of the last Update call.
+func (c *ConvergenceChecker) Delta() float64 { return c.d }
+
+// FlatTailChecker checks for a flat tail.
+//
+// Create one with NewFlatTailChecker, then for each check
+// call Update() followed by Reached() to see if a flat tail has been reached.
+type FlatTailChecker struct {
+	length     int
+	numLeaders int
+	stats      *FlatTailStats
+	logger     *zerolog.Logger
+}
+
+// NewFlatTailChecker creates a new flat tail checker.
+func NewFlatTailChecker(
+	length int, numLeaders int, stats *FlatTailStats, logger *zerolog.Logger,
+) *FlatTailChecker {
+	if stats == nil {
+		stats = &FlatTailStats{}
+	}
+	stats.Length = 0
+	stats.Threshold = 1
+	stats.DeltaNorm = 1
+	stats.Ranking = nil
+	return &FlatTailChecker{
+		length:     length,
+		stats:      stats,
+		numLeaders: numLeaders,
+		logger:     logger,
+	}
+}
+
+// Update updates the checker with another iteration of trust vector.
+//
+// d is the delta between t and its predecessor.
+func (c *FlatTailChecker) Update(t *sparse.Vector, d float64) {
+	entries := sparse.SortEntriesByValue(
+		append(t.Entries[:0:0], t.Entries...))
+	ranking := make([]int, 0, len(entries))
+	for _, entry := range entries {
+		ranking = append(ranking, entry.Index)
+	}
+	if len(ranking) > c.numLeaders {
+		ranking = ranking[:c.numLeaders]
+	}
+	if reflect.DeepEqual(ranking, c.stats.Ranking) {
+		c.stats.Length++
+	} else {
+		if c.stats.Length > 0 {
+			c.logger.Trace().
+				Int("length", c.stats.Length).
+				Msg("false flat tail detected")
+		}
+		if c.stats.Threshold <= c.stats.Length {
+			c.stats.Threshold = c.stats.Length + 1
+		}
+		c.stats.Length = 0
+		c.stats.DeltaNorm = d
+		c.stats.Ranking = ranking
+	}
+}
+
+// Reached returns whether a flat tail has been seen.
+func (c *FlatTailChecker) Reached() bool {
+	return c.stats.Length >= c.length
+}
+
+// Stats returns the flat-tail stats.
+func (c *FlatTailChecker) Stats() *FlatTailStats {
+	return c.stats
+}
+
 // Compute computes EigenTrust scores.
 //
 // Local trust (c) and pre-trust (p) must have already been canonicalized.
@@ -67,7 +189,6 @@ func Compute(
 	t := o.t
 	flatTail := o.flatTailLength
 	numLeaders := o.numLeaders
-	flatTailStats := o.flatTailStats
 	logger := zerolog.Ctx(ctx)
 	tm0 := time.Now()
 	n, err := c.Dim()
@@ -96,8 +217,6 @@ func Compute(
 	}
 	t1 := t0.Clone()
 
-	d0 := 1.0
-	d := 2 * e // initial sentinel
 	ct, err := c.Transpose(ctx)
 	if err != nil {
 		return nil, err
@@ -106,13 +225,6 @@ func Compute(
 	ap.ScaleVec(a, p)
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
-	if flatTailStats == nil {
-		flatTailStats = &FlatTailStats{}
-	}
-	flatTailStats.Length = 0
-	flatTailStats.Threshold = 1
-	flatTailStats.DeltaNorm = 1
-	flatTailStats.Ranking = nil
 	checkFreq := 1
 	if o.checkFreq != nil {
 		checkFreq = *o.checkFreq
@@ -138,25 +250,31 @@ func Compute(
 	if minIters <= 0 {
 		return nil, fmt.Errorf("minIters=%d must be at least 1", minIters)
 	}
+	convChecker := NewConvergenceChecker(t0, e, logger)
+	flatTailChecker := NewFlatTailChecker(
+		flatTail, numLeaders, o.flatTailStats, logger)
 	// hard-cap at maxIters
 	iter := 0
 	for ; iter < maxIters; iter++ {
-		// check exit criteria,
-		// first at minIters then every checkFreq iterations afterward.
-		if iter >= minIters && (iter-minIters)%checkFreq == 0 {
-			converged := d <= e
-			flatTailReached := flatTailStats.Length >= flatTail
-			if converged && flatTailReached {
-				// both criteria met
-				break
-			}
-		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
-		t1Old := t1.Clone()
+		// check exit criteria,
+		// first at minIters then every checkFreq iterations afterward.
+		if (iter-minIters)%checkFreq == 0 {
+			if iter >= minIters {
+				if err = convChecker.Update(t1); err != nil {
+					return nil, err
+				}
+				flatTailChecker.Update(t1, convChecker.Delta())
+				if convChecker.Converged() && flatTailChecker.Reached() {
+					// both criteria met
+					break
+				}
+			}
+		}
 		err = t1.MulVec(ctx, ct, t1)
 		if err != nil {
 			return nil, err
@@ -165,41 +283,6 @@ func Compute(
 		err = t1.AddVec(t1, ap)
 		if err != nil {
 			return nil, err
-		}
-		err = t1Old.SubVec(t1, t1Old)
-		if err != nil {
-			return nil, err
-		}
-		d = t1Old.Norm2()
-		logger.Trace().
-			Int("iteration", iter).
-			Float64("log10dPace", math.Log10(d/d0)).
-			Float64("log10dRemaining", math.Log10(d/e)).
-			Msg("one iteration")
-		d0 = d
-		entries := sparse.SortEntriesByValue(
-			append(t1.Entries[:0:0], t1.Entries...))
-		ranking := make([]int, 0, len(entries))
-		for _, entry := range entries {
-			ranking = append(ranking, entry.Index)
-		}
-		if len(ranking) > numLeaders {
-			ranking = ranking[:numLeaders]
-		}
-		if reflect.DeepEqual(ranking, flatTailStats.Ranking) {
-			flatTailStats.Length++
-		} else {
-			if flatTailStats.Length > 0 {
-				logger.Trace().
-					Int("length", flatTailStats.Length).
-					Msg("false flat tail detected")
-			}
-			if flatTailStats.Threshold <= flatTailStats.Length {
-				flatTailStats.Threshold = flatTailStats.Length + 1
-			}
-			flatTailStats.Length = 0
-			flatTailStats.DeltaNorm = d
-			flatTailStats.Ranking = ranking
 		}
 		runtime.GC()
 	}
@@ -216,6 +299,7 @@ func Compute(
 		Dur("durPrep", durPrep).
 		Dur("durIter", durIter).
 		Msg("finished")
+	flatTailStats := flatTailChecker.Stats()
 	logger.Trace().
 		Int("length", flatTailStats.Length).
 		Int("threshold", flatTailStats.Threshold).
