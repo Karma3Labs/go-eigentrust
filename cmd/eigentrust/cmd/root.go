@@ -41,6 +41,8 @@ as well as a client to interact with the server.`,
 	cfgFile string
 	logFile string
 	logger  zerolog.Logger
+
+	useFileURI bool
 )
 
 func Execute() {

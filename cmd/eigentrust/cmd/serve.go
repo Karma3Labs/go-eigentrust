@@ -17,6 +17,7 @@ var (
 	tls           bool
 	certPathname  string
 	keyPathname   string
+	localhost     bool
 	serveCmd      = &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the EigenTrust API",
@@ -37,9 +38,17 @@ var (
 				logger.Err(err).Msg("cannot create server implementation")
 				return
 			}
+			if localhost {
+				useFileURI = true
+			}
+			server.UseFileURI = useFileURI
 			basic.RegisterHandlersWithBaseURL(e,
 				basic.NewStrictHandler(server, nil), "/basic/v1")
 			if listenAddress == "" {
+				addr := ""
+				if localhost {
+					addr = "localhost"
+				}
 				port := 80
 				if tls {
 					port = 443
@@ -47,7 +56,7 @@ var (
 				if os.Geteuid() != 0 {
 					port += 8000
 				}
-				listenAddress = fmt.Sprintf(":%d", port)
+				listenAddress = fmt.Sprintf("%s:%d", addr, port)
 			}
 			if tls {
 				err = e.StartTLS(listenAddress, certPathname, keyPathname)
@@ -72,4 +81,8 @@ func init() {
 		"TLS server certificate pathname")
 	serveCmd.PersistentFlags().StringVar(&keyPathname, "tls-key", "server.key",
 		"TLS server private key pathname")
+	serveCmd.PersistentFlags().BoolVarP(&useFileURI, "use-file-uri", "F", false,
+		"enable file:// URI based trust matrix/vector loading")
+	serveCmd.PersistentFlags().BoolVarP(&localhost, "localhost", "L", false,
+		"localhost mode: listen on loopback address and enable file:// URI")
 }

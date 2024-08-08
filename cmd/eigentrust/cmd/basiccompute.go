@@ -57,6 +57,18 @@ func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
 		if path == "" {
 			path = parsed.Opaque
 		}
+		if useFileURI {
+			if path, err := filepath.Abs(path); err != nil {
+				return err
+			} else if err := ref.FromObjectStorageLocalTrust(basic.ObjectStorageLocalTrust{
+				Scheme: basic.ObjectStorageLocalTrustSchemeObjectstorage,
+				Url:    "file://" + path,
+			}); err != nil {
+				return err
+			}
+			ref.Scheme = "objectstorage" // XXX
+			return nil
+		}
 		return loadInlineLocalTrust(path, ref)
 	default:
 		return fmt.Errorf("invalid local trust URI scheme %#v", parsed.Scheme)
@@ -162,6 +174,18 @@ func trustVectorURIToRef(uri string, ref *basic.TrustVectorRef) error {
 		path := parsed.Path
 		if path == "" {
 			path = parsed.Opaque
+		}
+		if useFileURI {
+			if path, err := filepath.Abs(path); err != nil {
+				return err
+			} else if err := ref.FromObjectStorageTrustVector(basic.ObjectStorageTrustVector{
+				Scheme: basic.ObjectStorageTrustVectorSchemeObjectstorage,
+				Url:    "file://" + path,
+			}); err != nil {
+				return err
+			}
+			ref.Scheme = "objectstorage" // XXX
+			return nil
 		}
 		return loadInlineTrustVector(path, ref)
 	default:
@@ -302,6 +326,9 @@ func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
 func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	basicSetupEndpoint()
 	var err error
+	if useFileURI {
+		rawPeerIds = true
+	}
 	client, err := basic.NewClientWithResponses(endpoint)
 	if err != nil {
 		logger.Err(err).Msg("cannot create an API client")
@@ -472,5 +499,8 @@ for flat-tail algorithm and stats.
 (default: false)`)
 	basicComputeCmd.Flags().BoolVar(&printRequest, "print-request", false,
 		`Print the compute request JSON body and exit`)
+	basicComputeCmd.Flags().BoolVarP(&useFileURI, "use-file-uri", "F", false,
+		`Use objectstorage scheme with file:// URI for local file;
+implies --raw-peer-ids (default: false)`)
 	peerIndices = make(map[string]int)
 }

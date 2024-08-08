@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -27,6 +28,7 @@ type StrictServerImpl struct {
 	storedLocalTrust    map[LocalTrustId]*sparse.Matrix
 	storedLocalTrustMtx sync.Mutex
 	awsConfig           aws.Config
+	UseFileURI          bool
 }
 
 func NewStrictServerImpl(
@@ -40,6 +42,7 @@ func NewStrictServerImpl(
 		logger:           logger,
 		storedLocalTrust: make(map[LocalTrustId]*sparse.Matrix),
 		awsConfig:        awsConfig,
+		UseFileURI:       false,
 	}, nil
 }
 
@@ -465,6 +468,11 @@ func (server *StrictServerImpl) loadObjectStorageLocalTrust(
 		bucket := u.Host
 		path := strings.TrimPrefix(u.Path, "/")
 		return server.loadS3LocalTrust(ctx, bucket, path)
+	case "file":
+		if !server.UseFileURI {
+			return nil, fmt.Errorf("file: URI is disabled in this server")
+		}
+		return server.loadFileLocalTrust(u.Path)
 	default:
 		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
 			u.Scheme)
@@ -485,6 +493,17 @@ func (server *StrictServerImpl) loadS3LocalTrust(
 	}
 	defer func() { _ = res.Body.Close() }()
 	return server.loadCsvLocalTrust(csv.NewReader(res.Body))
+}
+
+func (server *StrictServerImpl) loadFileLocalTrust(
+	path string,
+) (*sparse.Matrix, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return server.loadCsvLocalTrust(csv.NewReader(f))
 }
 
 func (server *StrictServerImpl) loadCsvLocalTrust(
@@ -582,6 +601,11 @@ func (server *StrictServerImpl) loadObjectStorageTrustVector(
 		bucket := u.Host
 		path := strings.TrimPrefix(u.Path, "/")
 		return server.loadS3TrustVector(ctx, bucket, path)
+	case "file":
+		if !server.UseFileURI {
+			return nil, fmt.Errorf("file: URI is disabled in this server")
+		}
+		return server.loadFileTrustVector(u.Path)
 	default:
 		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
 			u.Scheme)
@@ -604,6 +628,17 @@ func (server *StrictServerImpl) loadS3TrustVector(
 	r := csv.NewReader(res.Body)
 	return server.loadCsvTrustVector(r)
 
+}
+
+func (server *StrictServerImpl) loadFileTrustVector(
+	path string,
+) (*sparse.Vector, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return server.loadCsvTrustVector(csv.NewReader(f))
 }
 
 func (server *StrictServerImpl) loadCsvTrustVector(
