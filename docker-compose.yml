@@ -9,10 +9,10 @@ services:
       - "8081:80"
     command: ["/app/build/main", "serve"]
 
-  go-eigentrust-9091:
+  go-eigentrust-9081:
     build: .
     image: go-eigentrust:latest
-    container_name: go-eigentrust-9091
+    container_name: go-eigentrust-9081
     ports:
       - "9081:80"
     command: ["/app/build/main", "serve"]
