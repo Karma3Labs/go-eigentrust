@@ -21,6 +21,7 @@ import (
 	"github.com/mohae/deepcopy"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 type StrictServerImpl struct {
@@ -491,7 +492,7 @@ func (server *StrictServerImpl) loadS3LocalTrust(
 	if err != nil {
 		return nil, fmt.Errorf("cannot fetch from S3: %w", err)
 	}
-	defer func() { _ = res.Body.Close() }()
+	defer util.Close(res.Body)
 	return server.loadCsvLocalTrust(csv.NewReader(res.Body))
 }
 
@@ -502,7 +503,7 @@ func (server *StrictServerImpl) loadFileLocalTrust(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
+	defer util.Close(f)
 	return server.loadCsvLocalTrust(csv.NewReader(f))
 }
 
@@ -624,7 +625,7 @@ func (server *StrictServerImpl) loadS3TrustVector(
 	if err != nil {
 		return nil, fmt.Errorf("cannot fetch trust vector: %w", err)
 	}
-	defer func() { _ = res.Body.Close() }()
+	defer util.Close(res.Body)
 	r := csv.NewReader(res.Body)
 	return server.loadCsvTrustVector(r)
 
@@ -637,7 +638,7 @@ func (server *StrictServerImpl) loadFileTrustVector(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
+	defer util.Close(f)
 	return server.loadCsvTrustVector(csv.NewReader(f))
 }
 

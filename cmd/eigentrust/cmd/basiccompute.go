@@ -91,7 +91,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer util.Close(f)
 	reader := csv.NewReader(f)
 	inputErrorf := func(field int, format string, v ...interface{}) error {
 		line, column := reader.FieldPos(0)
@@ -211,7 +211,7 @@ func loadInlineTrustVectorCsv(
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer util.Close(f)
 	reader := csv.NewReader(f)
 	inputErrorf := func(field int, format string, v ...interface{}) error {
 		line, column := reader.FieldPos(0)
@@ -287,7 +287,7 @@ func writeOutput(
 	if err != nil {
 		return fmt.Errorf("cannot open output file: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer util.Close(file)
 	csvWriter := csv.NewWriter(file)
 	for _, entry := range entries {
 		var peerId string
@@ -315,7 +315,7 @@ func writeFlatTailStats(stats basic.FlatTailStats, filename string) error {
 		return fmt.Errorf("cannot open flat-tail stats file for writing: %w",
 			err)
 	}
-	defer func() { _ = file.Close() }()
+	defer util.Close(file)
 	jsonEncoder := json.NewEncoder(file)
 	if err := jsonEncoder.Encode(stats); err != nil {
 		return err

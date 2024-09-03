@@ -11,6 +11,7 @@ import (
 
 	"k3l.io/go-eigentrust/pkg/basic"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	"k3l.io/go-eigentrust/pkg/util"
 
 	"github.com/gin-gonic/gin"
 )
@@ -85,7 +86,7 @@ func calculate(gc *gin.Context) error {
 		if err != nil {
 			return fmt.Errorf("cannot open peer names file: %w", err)
 		}
-		defer func() { _ = f.Close() }()
+		defer util.Close(f)
 		peerNames, peerIndices, err = basic.ReadPeerNamesFromCsv(csv.NewReader(f))
 		if err != nil {
 			return fmt.Errorf("cannot read peer names file: %w", err)
@@ -96,7 +97,7 @@ func calculate(gc *gin.Context) error {
 		if err != nil {
 			return fmt.Errorf("cannot open local trust file: %w", err)
 		}
-		defer func() { _ = f.Close() }()
+		defer util.Close(f)
 		localTrust, err = basic.ReadLocalTrustFromCsv(csv.NewReader(f),
 			peerIndices)
 		if err != nil {
@@ -108,7 +109,7 @@ func calculate(gc *gin.Context) error {
 		if err != nil {
 			return fmt.Errorf("cannot open personal trust file: %w", err)
 		}
-		defer func() { _ = f.Close() }()
+		defer util.Close(f)
 		preTrust, err = basic.ReadTrustVectorFromCsv(csv.NewReader(f),
 			peerIndices)
 		if err != nil {
