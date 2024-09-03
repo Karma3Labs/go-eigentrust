@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mohae/deepcopy"
 	"github.com/rs/zerolog"
@@ -483,14 +484,9 @@ func (server *StrictServerImpl) loadObjectStorageLocalTrust(
 func (server *StrictServerImpl) loadS3LocalTrust(
 	ctx context.Context, bucket string, key string,
 ) (*sparse.Matrix, error) {
-	client := s3.NewFromConfig(server.awsConfig)
-	req := s3.GetObjectInput{
-		Bucket: &bucket,
-		Key:    &key,
-	}
-	res, err := client.GetObject(ctx, &req)
+	res, err := server.loadS3Object(ctx, bucket, key)
 	if err != nil {
-		return nil, fmt.Errorf("cannot fetch from S3: %w", err)
+		return nil, fmt.Errorf("cannot load trust matrix from S3: %w", err)
 	}
 	defer util.Close(res.Body)
 	return server.loadCsvLocalTrust(csv.NewReader(res.Body))
@@ -616,14 +612,9 @@ func (server *StrictServerImpl) loadObjectStorageTrustVector(
 func (server *StrictServerImpl) loadS3TrustVector(
 	ctx context.Context, bucket string, key string,
 ) (*sparse.Vector, error) {
-	client := s3.NewFromConfig(server.awsConfig)
-	req := s3.GetObjectInput{
-		Bucket: &bucket,
-		Key:    &key,
-	}
-	res, err := client.GetObject(ctx, &req)
+	res, err := server.loadS3Object(ctx, bucket, key)
 	if err != nil {
-		return nil, fmt.Errorf("cannot fetch trust vector: %w", err)
+		return nil, fmt.Errorf("cannot load trust vector from S3: %w", err)
 	}
 	defer util.Close(res.Body)
 	r := csv.NewReader(res.Body)
@@ -672,6 +663,28 @@ func (server *StrictServerImpl) loadCsvTrustVector(
 		entries = append(entries, sparse.Entry{Index: i, Value: v})
 	}
 	return sparse.NewVector(size, entries), nil
+}
+
+func (server *StrictServerImpl) loadS3Object(
+	ctx context.Context, bucket string, key string,
+) (*s3.GetObjectOutput, error) {
+	client := s3.NewFromConfig(server.awsConfig)
+	region, err := manager.GetBucketRegion(ctx, client, bucket)
+	if err != nil {
+		return nil, fmt.Errorf("GetBucketRegion failed: %w", err)
+	}
+	awsConfig := server.awsConfig.Copy()
+	awsConfig.Region = region
+	client = s3.NewFromConfig(awsConfig)
+	req := s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+	res, err := client.GetObject(ctx, &req)
+	if err != nil {
+		return nil, fmt.Errorf("GetObject failed: %w", err)
+	}
+	return res, nil
 }
 
 func (server *StrictServerImpl) setStoredLocalTrust(
