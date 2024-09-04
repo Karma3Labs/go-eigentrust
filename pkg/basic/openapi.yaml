@@ -139,7 +139,7 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/LocalTrustRef"
+              $ref: "#/components/schemas/TrustMatrixRef"
         required: true
       responses:
         "200":
@@ -173,7 +173,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/InlineLocalTrust"
+                $ref: "#/components/schemas/InlineTrustMatrix"
         "404":
           description: The local trust does not exist.
     head:
@@ -207,23 +207,23 @@ components:
       in: path
       required: true
       schema:
-        $ref: "#/components/schemas/LocalTrustId"
+        $ref: "#/components/schemas/TrustCollectionId"
   schemas:
-    LocalTrustId:
+    TrustCollectionId:
       description: |
-        Denotes a local trust collection.
+        Denotes a trust collection (matrix/vector).
       type: string
       minLength: 1
-    LocalTrustRef:
+    TrustMatrixRef:
       description: |
-        refers to a local trust.
+        Refers to a trust matrix, such as local trust.
       type: object
       allOf:
         - properties:
             scheme:
-              title: Local trust reference scheme.
+              title: Trust reference scheme.
               description: |
-                Local trust reference scheme, akin to URI scheme.
+                Trust reference scheme, akin to URI scheme.
               type: string
               enum:
                 - inline
@@ -232,9 +232,9 @@ components:
           required:
             - scheme
         - oneOf:
-            - $ref: "#/components/schemas/InlineLocalTrust"
-            - $ref: "#/components/schemas/StoredLocalTrust"
-            - $ref: "#/components/schemas/ObjectStorageLocalTrust"
+            - $ref: "#/components/schemas/InlineTrustMatrix"
+            - $ref: "#/components/schemas/StoredTrustMatrix"
+            - $ref: "#/components/schemas/ObjectStorageTrustMatrix"
       examples:
         - scheme: inline
           size: 3
@@ -255,12 +255,12 @@ components:
           id: "3"
         - scheme: stored
           id: engagement
-    InlineLocalTrust:
+    InlineTrustMatrix:
       description: |
-        Refers to a local trust matrix "inline".
+        Refers to a trust matrix "inline".
 
-        Instead of pointing (referencing) to an externally stored local trust,
-        it carries the contents of the local trust matrix
+        Instead of pointing (referencing) to an externally stored trust matrix,
+        it carries the contents of the trust matrix
         within the reference object itself.
       type: object
       required:
@@ -275,22 +275,22 @@ components:
           enum: [ "inline" ]
         size:
           description: |
-            Denotes the number of peers in the local trust,
+            Denotes the number of peers in the trust matrix,
             i.e. its square dimension.
           type: integer
           minimum: 1
         entries:
           description: |
-            Contains the non-zero entries in the local trust matrix.
+            Contains the non-zero entries in the trust matrix.
 
             Truster/trustee pairs missing here are assigned zero direct trust,
             i.e. no trust relationship.
           type: array
           items:
-            $ref: "#/components/schemas/InlineLocalTrustEntry"
-    InlineLocalTrustEntry:
+            $ref: "#/components/schemas/InlineTrustMatrixEntry"
+    InlineTrustMatrixEntry:
       description: |
-        Represents an entry in the local trust matrix.
+        Represents an entry in the trust matrix.
 
         Denotes that one peer (`i`) places a direct trust in another peer (`j`)
         by a specific amount (`v`).
@@ -306,7 +306,7 @@ components:
 
             It is a zero-based index,
             and must be less than the size (dimension)
-            of the enclosing local trust matrix.
+            of the enclosing trust matrix.
           type: integer
           minimum: 0
         j:
@@ -315,7 +315,7 @@ components:
 
             It is a zero-based index,
             and must be less than the size (dimension)
-            of the enclosing local trust matrix.
+            of the enclosing trust matrix.
           type: integer
           minimum: 0
         v:
@@ -332,11 +332,11 @@ components:
         - i: 1
           j: 2
           v: 1
-    StoredLocalTrust:
+    StoredTrustMatrix:
       description: |
-        Refers to a local trust stored on the server.
+        Refers to a trust matrix stored on the server.
         
-        Stored local trust is identified with its ID string.
+        Stored trust matrix is identified with its ID string.
       type: object
       required:
         - scheme
@@ -348,10 +348,10 @@ components:
           type: string
           enum: [ "stored" ]
         id:
-          $ref: "#/components/schemas/LocalTrustId"
-    ObjectStorageLocalTrust:
+          $ref: "#/components/schemas/TrustCollectionId"
+    ObjectStorageTrustMatrix:
       description: |
-        Refers to a local trust matrix in a remote object storage service.
+        Refers to a trust matrix in a remote object storage service.
       type: object
       required:
         - scheme
@@ -436,7 +436,7 @@ components:
           entries: [ ]
     InlineTrustVectorEntry:
       description: |
-        Represents an entry in the local trust matrix.
+        Represents an entry in the trust vector.
 
         Denotes that a trust is placed in a peer (`i`)
         by a specific amount (`v`).
@@ -556,7 +556,7 @@ components:
               - localTrust
             properties:
               localTrust:
-                $ref: "#/components/schemas/LocalTrustRef"
+                $ref: "#/components/schemas/TrustMatrixRef"
               initialTrust:
                 $ref: "#/components/schemas/TrustVectorRef"
               preTrust:

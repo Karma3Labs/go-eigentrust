@@ -27,7 +27,7 @@ import (
 
 type StrictServerImpl struct {
 	logger              zerolog.Logger
-	storedLocalTrust    map[LocalTrustId]*sparse.Matrix
+	storedLocalTrust    map[TrustCollectionId]*sparse.Matrix
 	storedLocalTrustMtx sync.Mutex
 	awsConfig           aws.Config
 	UseFileURI          bool
@@ -42,7 +42,7 @@ func NewStrictServerImpl(
 	}
 	return &StrictServerImpl{
 		logger:           logger,
-		storedLocalTrust: make(map[LocalTrustId]*sparse.Matrix),
+		storedLocalTrust: make(map[TrustCollectionId]*sparse.Matrix),
 		awsConfig:        awsConfig,
 		UseFileURI:       false,
 	}, nil
@@ -68,7 +68,7 @@ func (e HTTPError) Error() string {
 }
 
 func (server *StrictServerImpl) compute(
-	ctx context.Context, localTrustRef *LocalTrustRef,
+	ctx context.Context, localTrustRef *TrustMatrixRef,
 	initialTrust *TrustVectorRef, preTrust *TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
@@ -83,7 +83,7 @@ func (server *StrictServerImpl) compute(
 		t0 *sparse.Vector
 	)
 	opts := []ComputeOpt{WithFlatTailStats(&flatTailStats)}
-	if c, err = server.loadLocalTrust(ctx, localTrustRef); err != nil {
+	if c, err = server.loadTrustMatrix(ctx, localTrustRef); err != nil {
 		err = HTTPError{400, fmt.Errorf("cannot load local trust: %w", err)}
 		return
 	}
@@ -294,8 +294,8 @@ func (server *StrictServerImpl) GetLocalTrust(
 }
 
 func (server *StrictServerImpl) getLocalTrust(
-	_ context.Context, id LocalTrustId,
-) (*InlineLocalTrust, error) {
+	_ context.Context, id TrustCollectionId,
+) (*InlineTrustMatrix, error) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
 	c := server.storedLocalTrust[id]
@@ -306,17 +306,17 @@ func (server *StrictServerImpl) getLocalTrust(
 	if err != nil {
 		return nil, fmt.Errorf("cannot get dimension: %w", err)
 	}
-	entries := make([]InlineLocalTrustEntry, 0, c.NNZ())
+	entries := make([]InlineTrustMatrixEntry, 0, c.NNZ())
 	for i, row := range c.Entries {
 		for _, entry := range row {
-			entries = append(entries, InlineLocalTrustEntry{
+			entries = append(entries, InlineTrustMatrixEntry{
 				I: i,
 				J: entry.Index,
 				V: entry.Value,
 			})
 		}
 	}
-	return &InlineLocalTrust{
+	return &InlineTrustMatrix{
 		Entries: entries,
 		Size:    cDim,
 	}, nil
@@ -341,7 +341,7 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 		Str("func", "(*StrictServerImpl).UpdateLocalTrust").
 		Str("localTrustId", request.Id).
 		Logger()
-	c, err := server.loadLocalTrust(ctx, request.Body)
+	c, err := server.loadTrustMatrix(ctx, request.Body)
 	if err != nil {
 		return nil, HTTPError{
 			400, fmt.Errorf("cannot load local trust: %w", err),
@@ -381,39 +381,39 @@ func (server *StrictServerImpl) DeleteLocalTrust(
 	return DeleteLocalTrust204Response{}, nil
 }
 
-func (server *StrictServerImpl) loadLocalTrust(
+func (server *StrictServerImpl) loadTrustMatrix(
 	ctx context.Context,
-	ref *LocalTrustRef,
+	ref *TrustMatrixRef,
 ) (*sparse.Matrix, error) {
 	switch ref.Scheme {
-	case LocalTrustRefSchemeInline:
-		inline, err := ref.AsInlineLocalTrust()
+	case TrustMatrixRefSchemeInline:
+		inline, err := ref.AsInlineTrustMatrix()
 		if err != nil {
 			return nil, fmt.Errorf(
 				"cannot parse inline local trust reference: %w", err)
 		}
-		return server.loadInlineLocalTrust(&inline)
-	case LocalTrustRefSchemeStored:
-		stored, err := ref.AsStoredLocalTrust()
+		return server.loadInlineTrustMatrix(&inline)
+	case TrustMatrixRefSchemeStored:
+		stored, err := ref.AsStoredTrustMatrix()
 		if err != nil {
 			return nil, fmt.Errorf(
 				"cannot parse stored local trust reference: %w", err)
 		}
-		return server.loadStoredLocalTrust(&stored)
-	case LocalTrustRefSchemeObjectstorage:
-		objectStorage, err := ref.AsObjectStorageLocalTrust()
+		return server.loadStoredTrustMatrix(&stored)
+	case TrustMatrixRefSchemeObjectstorage:
+		objectStorage, err := ref.AsObjectStorageTrustMatrix()
 		if err != nil {
 			return nil, fmt.Errorf(
 				"cannot parse object storage local trust reference: %w", err)
 		}
-		return server.loadObjectStorageLocalTrust(ctx, &objectStorage)
+		return server.loadObjectStorageTrustMatrix(ctx, &objectStorage)
 	default:
 		return nil, fmt.Errorf("unknown local trust ref type %#v", ref.Scheme)
 	}
 }
 
-func (server *StrictServerImpl) loadInlineLocalTrust(
-	inline *InlineLocalTrust,
+func (server *StrictServerImpl) loadInlineTrustMatrix(
+	inline *InlineTrustMatrix,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
 		return nil, fmt.Errorf("invalid size=%#v", inline.Size)
@@ -441,14 +441,14 @@ func (server *StrictServerImpl) loadInlineLocalTrust(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
-func (server *StrictServerImpl) loadStoredLocalTrust(
-	stored *StoredLocalTrust,
+func (server *StrictServerImpl) loadStoredTrustMatrix(
+	stored *StoredTrustMatrix,
 ) (*sparse.Matrix, error) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
 	c, ok := server.storedLocalTrust[stored.Id]
 	if !ok {
-		return nil, HTTPError{400, errors.New("local trust not found")}
+		return nil, HTTPError{400, errors.New("trust matrix not found")}
 	}
 	// Returned c is modified in-place (canonicalized, size-matched)
 	// so return a disposable copy, preserving the original.
@@ -458,8 +458,8 @@ func (server *StrictServerImpl) loadStoredLocalTrust(
 	return c, nil
 }
 
-func (server *StrictServerImpl) loadObjectStorageLocalTrust(
-	ctx context.Context, ref *ObjectStorageLocalTrust,
+func (server *StrictServerImpl) loadObjectStorageTrustMatrix(
+	ctx context.Context, ref *ObjectStorageTrustMatrix,
 ) (*sparse.Matrix, error) {
 	u, err := url.Parse(ref.Url)
 	if err != nil {
@@ -469,19 +469,19 @@ func (server *StrictServerImpl) loadObjectStorageLocalTrust(
 	case "s3":
 		bucket := u.Host
 		path := strings.TrimPrefix(u.Path, "/")
-		return server.loadS3LocalTrust(ctx, bucket, path)
+		return server.loadS3TrustMatrix(ctx, bucket, path)
 	case "file":
 		if !server.UseFileURI {
 			return nil, fmt.Errorf("file: URI is disabled in this server")
 		}
-		return server.loadFileLocalTrust(u.Path)
+		return server.loadFileTrustMatrix(u.Path)
 	default:
 		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
 			u.Scheme)
 	}
 }
 
-func (server *StrictServerImpl) loadS3LocalTrust(
+func (server *StrictServerImpl) loadS3TrustMatrix(
 	ctx context.Context, bucket string, key string,
 ) (*sparse.Matrix, error) {
 	res, err := server.loadS3Object(ctx, bucket, key)
@@ -489,10 +489,10 @@ func (server *StrictServerImpl) loadS3LocalTrust(
 		return nil, fmt.Errorf("cannot load trust matrix from S3: %w", err)
 	}
 	defer util.Close(res.Body)
-	return server.loadCsvLocalTrust(csv.NewReader(res.Body))
+	return server.loadCsvTrustMatrix(csv.NewReader(res.Body))
 }
 
-func (server *StrictServerImpl) loadFileLocalTrust(
+func (server *StrictServerImpl) loadFileTrustMatrix(
 	path string,
 ) (*sparse.Matrix, error) {
 	f, err := os.Open(path)
@@ -500,10 +500,10 @@ func (server *StrictServerImpl) loadFileLocalTrust(
 		return nil, err
 	}
 	defer util.Close(f)
-	return server.loadCsvLocalTrust(csv.NewReader(f))
+	return server.loadCsvTrustMatrix(csv.NewReader(f))
 }
 
-func (server *StrictServerImpl) loadCsvLocalTrust(
+func (server *StrictServerImpl) loadCsvTrustMatrix(
 	r *csv.Reader,
 ) (*sparse.Matrix, error) {
 	header, err := r.Read()
@@ -547,14 +547,14 @@ func (server *StrictServerImpl) loadTrustVector(
 	ref *TrustVectorRef,
 ) (*sparse.Vector, error) {
 	switch ref.Scheme {
-	case TrustVectorRefSchemeInline:
+	case Inline:
 		inline, err := ref.AsInlineTrustVector()
 		if err != nil {
 			return nil, fmt.Errorf(
 				"cannot parse inline trust vector reference: %w", err)
 		}
 		return loadInlineTrustVector(&inline)
-	case TrustVectorRefSchemeObjectstorage:
+	case Objectstorage:
 		objectStorage, err := ref.AsObjectStorageTrustVector()
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -688,7 +688,7 @@ func (server *StrictServerImpl) loadS3Object(
 }
 
 func (server *StrictServerImpl) setStoredLocalTrust(
-	id LocalTrustId, c *sparse.Matrix,
+	id TrustCollectionId, c *sparse.Matrix,
 ) (created bool) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
@@ -698,7 +698,7 @@ func (server *StrictServerImpl) setStoredLocalTrust(
 }
 
 func (server *StrictServerImpl) mergeStoredLocalTrust(
-	id LocalTrustId, c *sparse.Matrix,
+	id TrustCollectionId, c *sparse.Matrix,
 ) (c2 *sparse.Matrix, created bool) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
@@ -712,7 +712,7 @@ func (server *StrictServerImpl) mergeStoredLocalTrust(
 }
 
 func (server *StrictServerImpl) deleteStoredLocalTrust(
-	id LocalTrustId,
+	id TrustCollectionId,
 ) (deleted bool) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()

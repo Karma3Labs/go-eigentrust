@@ -46,7 +46,7 @@ var (
 	printRequest          bool
 )
 
-func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
+func trustMatrixURIToRef(uri string, ref *basic.TrustMatrixRef) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return err
@@ -60,8 +60,8 @@ func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
 		if useFileURI {
 			if path, err := filepath.Abs(path); err != nil {
 				return err
-			} else if err := ref.FromObjectStorageLocalTrust(basic.ObjectStorageLocalTrust{
-				Scheme: basic.ObjectStorageLocalTrustSchemeObjectstorage,
+			} else if err := ref.FromObjectStorageTrustMatrix(basic.ObjectStorageTrustMatrix{
+				Scheme: basic.ObjectStorageTrustMatrixSchemeObjectstorage,
 				Url:    "file://" + path,
 			}); err != nil {
 				return err
@@ -69,24 +69,26 @@ func localTrustURIToRef(uri string, ref *basic.LocalTrustRef) error {
 			ref.Scheme = "objectstorage" // XXX
 			return nil
 		}
-		return loadInlineLocalTrust(path, ref)
+		return loadInlineTrustMatrix(path, ref)
 	default:
 		return fmt.Errorf("invalid local trust URI scheme %#v", parsed.Scheme)
 	}
 }
 
-func loadInlineLocalTrust(filename string, ref *basic.LocalTrustRef) error {
+func loadInlineTrustMatrix(filename string, ref *basic.TrustMatrixRef) error {
 	logger.Trace().Str("filename", filename).Msg("loading inline local trust")
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".csv":
-		return loadInlineLocalTrustCsv(filename, ref)
+		return loadInlineTrustMatrixCsv(filename, ref)
 	default:
 		return fmt.Errorf("invalid local trust file type %#v", ext)
 	}
 }
 
-func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
+func loadInlineTrustMatrixCsv(
+	filename string, ref *basic.TrustMatrixRef,
+) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -105,7 +107,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		return fmt.Errorf("%s:%d:%d: %s: %s",
 			filename, line, column, fmt.Sprintf(format, v...), err)
 	}
-	inline := basic.InlineLocalTrust{Scheme: basic.InlineLocalTrustSchemeInline}
+	inline := basic.InlineTrustMatrix{Scheme: basic.InlineTrustMatrixSchemeInline}
 	ignoreFirst := csvHasHeader
 	fields, err := reader.Read()
 	for ; err == nil; fields, err = reader.Read() {
@@ -143,7 +145,7 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 			return inputWrapf(err, 2, "invalid trust value=%#v", fields[2])
 		}
 		inline.Entries = append(inline.Entries,
-			basic.InlineLocalTrustEntry{I: from, J: to, V: value})
+			basic.InlineTrustMatrixEntry{I: from, J: to, V: value})
 		if inline.Size <= from {
 			inline.Size = from + 1
 		}
@@ -152,15 +154,15 @@ func loadInlineLocalTrustCsv(filename string, ref *basic.LocalTrustRef) error {
 		}
 	}
 	if inline.Size == 0 {
-		return errors.New("empty local trust")
+		return errors.New("empty trust matrix")
 	}
 	if err != io.EOF {
-		return fmt.Errorf("cannot read local trust CSV %#v: %w", filename, err)
+		return fmt.Errorf("cannot read trust matrix CSV %#v: %w", filename, err)
 	}
-	if err = ref.FromInlineLocalTrust(inline); err != nil {
-		return fmt.Errorf("cannot wrap inline local trust: %w", err)
+	if err = ref.FromInlineTrustMatrix(inline); err != nil {
+		return fmt.Errorf("cannot wrap inline trust matrix: %w", err)
 	}
-	ref.Scheme = basic.LocalTrustRefSchemeInline
+	ref.Scheme = basic.TrustMatrixRefSchemeInline
 	return nil
 }
 
@@ -276,7 +278,7 @@ func loadInlineTrustVectorCsv(
 	if err = ref.FromInlineTrustVector(inline); err != nil {
 		return fmt.Errorf("cannot wrap inline trust vector: %w", err)
 	}
-	ref.Scheme = basic.TrustVectorRefSchemeInline
+	ref.Scheme = basic.Inline
 	return nil
 }
 
@@ -345,7 +347,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		PreTrust:     nil,
 		InitialTrust: nil,
 	}
-	err = localTrustURIToRef(localTrustURI, &requestBody.LocalTrust)
+	err = trustMatrixURIToRef(localTrustURI, &requestBody.LocalTrust)
 	if err != nil {
 		logger.Err(err).Msg("cannot parse/load local trust reference")
 		return
