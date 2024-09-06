@@ -533,6 +533,96 @@ components:
           items:
             type: integer
             minimum: 0
+    ComputeRequestBody:
+      type: object
+      required:
+        - localTrust
+      properties:
+        localTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+        initialTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        preTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        alpha:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          default: 0.5
+        epsilon:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        flatTail:
+          description: |
+            The length of the flat tail
+            (ranking unchanged from previous iteration)
+            that must be seen before terminating the recursion.
+            0 means a flat tail need not be seen,
+            and the recursion is terminated solely based upon epsilon.
+          type: integer
+          minimum: 0
+        numLeaders:
+          description: |
+            The number of top-ranking peers to consider
+            for the purpose of flat-tail algorithm.  0 means everyone.
+          type: integer
+          minimum: 0
+        maxIterations:
+          description: |
+            The maximum number of iterations after which to stop
+            even if other termination criteria are not met.
+            0 means no limit.
+          type: integer
+          minimum: 0
+        minIterations:
+          description: |
+            The minimum number of iterations to perform
+            even if other termination criteria are met.
+            Defaults to checkFreq, which in turn defaults to 1.
+          type: integer
+          minimum: 1
+        checkFreq:
+          description: |
+            If given (n), exit criteria are checked every n iterations.
+            It can be used in conjunction with minIterations
+            for "modulo n" behavior,
+            e.g. with minIterations=7 and checkFreq=5
+            exit criteria are checked after 7/12/17/... iterations.
+            Default is 1: exit criteria are checked after every iteration.
+          type: integer
+          minimum: 1
+        globalTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+          description: |
+            Where to store the compute result.
+            If not given, return inline.
+        effectiveLocalTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+          description: |
+            Where to store the effective local trust used for compute.
+            This is the local trust after canonicalization
+            and pre-trust substitution (for peers without outbound trust).
+        effectivePreTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+          description: |
+            Where to store the effective pre-trust used for compute.
+        effectiveInitialTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+          description: |
+            Where to store the effective initial trust used for compute.
+    ComputeWithStatsResponseOK:
+      type: object
+      required:
+        - eigenTrust
+        - flatTailStats
+      properties:
+        eigenTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        flatTailStats:
+          $ref: "#/components/schemas/FlatTailStats"
     ServerStatus:
       type: object
       required:
@@ -542,6 +632,17 @@ components:
           description: |
             The server status message.
           type: string
+    InvalidRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: |
+            Describes the error in a human-readable message.
+
+            It may be empty.
+          type: string
   requestBodies:
     ComputeRequestBody:
       description: |
@@ -550,85 +651,7 @@ components:
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - localTrust
-            properties:
-              localTrust:
-                $ref: "#/components/schemas/TrustMatrixRef"
-              initialTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              preTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              alpha:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-                default: 0.5
-              epsilon:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-              flatTail:
-                description: |
-                  The length of the flat tail
-                  (ranking unchanged from previous iteration)
-                  that must be seen before terminating the recursion.
-                  0 means a flat tail need not be seen,
-                  and the recursion is terminated solely based upon epsilon.
-                type: integer
-                minimum: 0
-              numLeaders:
-                description: |
-                  The number of top-ranking peers to consider
-                  for the purpose of flat-tail algorithm.  0 means everyone.
-                type: integer
-                minimum: 0
-              maxIterations:
-                description: |
-                  The maximum number of iterations after which to stop
-                  even if other termination criteria are not met.
-                  0 means no limit.
-                type: integer
-                minimum: 0
-              minIterations:
-                description: |
-                  The minimum number of iterations to perform
-                  even if other termination criteria are met.
-                  Defaults to checkFreq, which in turn defaults to 1.
-                type: integer
-                minimum: 1
-              checkFreq:
-                description: |
-                  If given (n), exit criteria are checked every n iterations.
-                  It can be used in conjunction with minIterations
-                  for "modulo n" behavior,
-                  e.g. with minIterations=7 and checkFreq=5
-                  exit criteria are checked after 7/12/17/... iterations.
-                  Default is 1: exit criteria are checked after every iteration.
-                type: integer
-                minimum: 1
-              globalTrust:
-                $ref: "#/components/schemas/TrustMatrixRef"
-                description: |
-                  Where to store the compute result.
-                  If not given, return inline.
-              effectiveLocalTrust:
-                $ref: "#/components/schemas/TrustMatrixRef"
-                description: |
-                  Where to store the effective local trust used for compute.
-                  This is the local trust after canonicalization
-                  and pre-trust substitution (for peers without outbound trust).
-              effectivePreTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-                description: |
-                  Where to store the effective pre-trust used for compute.
-              effectiveInitialTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-                description: |
-                  Where to store the effective initial trust used for compute.
+            $ref: "#/components/schemas/ComputeRequestBody"
           examples:
             Simple1:
               summary: Simple 3-peer example
@@ -787,7 +810,6 @@ components:
                       j: 2
                       v: 1.0
                 alpha: 0.1
-
   responses:
     ComputeWithStatsResponseOK:
       description: |
@@ -798,31 +820,14 @@ components:
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - eigenTrust
-              - flatTailStats
-            properties:
-              eigenTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              flatTailStats:
-                $ref: "#/components/schemas/FlatTailStats"
+            $ref: "#/components/schemas/ComputeWithStatsResponseOK"
     InvalidRequest:
       description: |
         Client sent an invalid request.
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - message
-            properties:
-              message:
-                description: |
-                  Describes the error in a human-readable message.
-
-                  It may be empty.
-                type: string
+            $ref: "#/components/schemas/InvalidRequest"
           examples:
             Example1:
               description: |

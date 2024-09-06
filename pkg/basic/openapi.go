@@ -61,6 +61,71 @@ const (
 	Stored        TrustVectorRefScheme = "stored"
 )
 
+// ComputeRequestBody defines model for ComputeRequestBody.
+type ComputeRequestBody struct {
+	Alpha *float64 `json:"alpha,omitempty"`
+
+	// CheckFreq If given (n), exit criteria are checked every n iterations.
+	// It can be used in conjunction with minIterations
+	// for "modulo n" behavior,
+	// e.g. with minIterations=7 and checkFreq=5
+	// exit criteria are checked after 7/12/17/... iterations.
+	// Default is 1: exit criteria are checked after every iteration.
+	CheckFreq *int `json:"checkFreq,omitempty"`
+
+	// EffectiveInitialTrust Refers to a trust vector.
+	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
+
+	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
+	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
+
+	// EffectivePreTrust Refers to a trust vector.
+	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
+	Epsilon           *float64        `json:"epsilon,omitempty"`
+
+	// FlatTail The length of the flat tail
+	// (ranking unchanged from previous iteration)
+	// that must be seen before terminating the recursion.
+	// 0 means a flat tail need not be seen,
+	// and the recursion is terminated solely based upon epsilon.
+	FlatTail *int `json:"flatTail,omitempty"`
+
+	// GlobalTrust Refers to a trust matrix, such as local trust.
+	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
+
+	// InitialTrust Refers to a trust vector.
+	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
+
+	// LocalTrust Refers to a trust matrix, such as local trust.
+	LocalTrust TrustMatrixRef `json:"localTrust"`
+
+	// MaxIterations The maximum number of iterations after which to stop
+	// even if other termination criteria are not met.
+	// 0 means no limit.
+	MaxIterations *int `json:"maxIterations,omitempty"`
+
+	// MinIterations The minimum number of iterations to perform
+	// even if other termination criteria are met.
+	// Defaults to checkFreq, which in turn defaults to 1.
+	MinIterations *int `json:"minIterations,omitempty"`
+
+	// NumLeaders The number of top-ranking peers to consider
+	// for the purpose of flat-tail algorithm.  0 means everyone.
+	NumLeaders *int `json:"numLeaders,omitempty"`
+
+	// PreTrust Refers to a trust vector.
+	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
+}
+
+// ComputeWithStatsResponseOK defines model for ComputeWithStatsResponseOK.
+type ComputeWithStatsResponseOK struct {
+	// EigenTrust Refers to a trust vector.
+	EigenTrust TrustVectorRef `json:"eigenTrust"`
+
+	// FlatTailStats Flat-tail algorithm stats and peer ranking.
+	FlatTailStats FlatTailStats `json:"flatTailStats"`
+}
+
 // FlatTailStats Flat-tail algorithm stats and peer ranking.
 type FlatTailStats struct {
 	// DeltaNorm The d value as of the head of the last flat-tail.
@@ -174,6 +239,14 @@ type InlineTrustVectorEntry struct {
 	V float64 `json:"v"`
 }
 
+// InvalidRequest defines model for InvalidRequest.
+type InvalidRequest struct {
+	// Message Describes the error in a human-readable message.
+	//
+	// It may be empty.
+	Message string `json:"message"`
+}
+
 // ObjectStorageTrustMatrix Refers to a trust matrix in a remote object storage service.
 type ObjectStorageTrustMatrix struct {
 	// Scheme A fixed string `"objectstorage"`.
@@ -250,196 +323,11 @@ type TrustVectorRefScheme string
 // LocalTrustIdParam Denotes a trust collection (matrix/vector).
 type LocalTrustIdParam = TrustCollectionId
 
-// ComputeWithStatsResponseOK defines model for ComputeWithStatsResponseOK.
-type ComputeWithStatsResponseOK struct {
-	// EigenTrust Refers to a trust vector.
-	EigenTrust TrustVectorRef `json:"eigenTrust"`
-
-	// FlatTailStats Flat-tail algorithm stats and peer ranking.
-	FlatTailStats FlatTailStats `json:"flatTailStats"`
-}
-
-// InvalidRequest defines model for InvalidRequest.
-type InvalidRequest struct {
-	// Message Describes the error in a human-readable message.
-	//
-	// It may be empty.
-	Message string `json:"message"`
-}
-
 // ServerNotReady defines model for ServerNotReady.
 type ServerNotReady = ServerStatus
 
 // ServerReady defines model for ServerReady.
 type ServerReady = ServerStatus
-
-// ComputeRequestBody defines model for ComputeRequestBody.
-type ComputeRequestBody struct {
-	Alpha *float64 `json:"alpha,omitempty"`
-
-	// CheckFreq If given (n), exit criteria are checked every n iterations.
-	// It can be used in conjunction with minIterations
-	// for "modulo n" behavior,
-	// e.g. with minIterations=7 and checkFreq=5
-	// exit criteria are checked after 7/12/17/... iterations.
-	// Default is 1: exit criteria are checked after every iteration.
-	CheckFreq *int `json:"checkFreq,omitempty"`
-
-	// EffectiveInitialTrust Refers to a trust vector.
-	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
-
-	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
-	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
-
-	// EffectivePreTrust Refers to a trust vector.
-	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
-	Epsilon           *float64        `json:"epsilon,omitempty"`
-
-	// FlatTail The length of the flat tail
-	// (ranking unchanged from previous iteration)
-	// that must be seen before terminating the recursion.
-	// 0 means a flat tail need not be seen,
-	// and the recursion is terminated solely based upon epsilon.
-	FlatTail *int `json:"flatTail,omitempty"`
-
-	// GlobalTrust Refers to a trust matrix, such as local trust.
-	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
-
-	// InitialTrust Refers to a trust vector.
-	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
-
-	// LocalTrust Refers to a trust matrix, such as local trust.
-	LocalTrust TrustMatrixRef `json:"localTrust"`
-
-	// MaxIterations The maximum number of iterations after which to stop
-	// even if other termination criteria are not met.
-	// 0 means no limit.
-	MaxIterations *int `json:"maxIterations,omitempty"`
-
-	// MinIterations The minimum number of iterations to perform
-	// even if other termination criteria are met.
-	// Defaults to checkFreq, which in turn defaults to 1.
-	MinIterations *int `json:"minIterations,omitempty"`
-
-	// NumLeaders The number of top-ranking peers to consider
-	// for the purpose of flat-tail algorithm.  0 means everyone.
-	NumLeaders *int `json:"numLeaders,omitempty"`
-
-	// PreTrust Refers to a trust vector.
-	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
-}
-
-// ComputeJSONBody defines parameters for Compute.
-type ComputeJSONBody struct {
-	Alpha *float64 `json:"alpha,omitempty"`
-
-	// CheckFreq If given (n), exit criteria are checked every n iterations.
-	// It can be used in conjunction with minIterations
-	// for "modulo n" behavior,
-	// e.g. with minIterations=7 and checkFreq=5
-	// exit criteria are checked after 7/12/17/... iterations.
-	// Default is 1: exit criteria are checked after every iteration.
-	CheckFreq *int `json:"checkFreq,omitempty"`
-
-	// EffectiveInitialTrust Refers to a trust vector.
-	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
-
-	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
-	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
-
-	// EffectivePreTrust Refers to a trust vector.
-	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
-	Epsilon           *float64        `json:"epsilon,omitempty"`
-
-	// FlatTail The length of the flat tail
-	// (ranking unchanged from previous iteration)
-	// that must be seen before terminating the recursion.
-	// 0 means a flat tail need not be seen,
-	// and the recursion is terminated solely based upon epsilon.
-	FlatTail *int `json:"flatTail,omitempty"`
-
-	// GlobalTrust Refers to a trust matrix, such as local trust.
-	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
-
-	// InitialTrust Refers to a trust vector.
-	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
-
-	// LocalTrust Refers to a trust matrix, such as local trust.
-	LocalTrust TrustMatrixRef `json:"localTrust"`
-
-	// MaxIterations The maximum number of iterations after which to stop
-	// even if other termination criteria are not met.
-	// 0 means no limit.
-	MaxIterations *int `json:"maxIterations,omitempty"`
-
-	// MinIterations The minimum number of iterations to perform
-	// even if other termination criteria are met.
-	// Defaults to checkFreq, which in turn defaults to 1.
-	MinIterations *int `json:"minIterations,omitempty"`
-
-	// NumLeaders The number of top-ranking peers to consider
-	// for the purpose of flat-tail algorithm.  0 means everyone.
-	NumLeaders *int `json:"numLeaders,omitempty"`
-
-	// PreTrust Refers to a trust vector.
-	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
-}
-
-// ComputeWithStatsJSONBody defines parameters for ComputeWithStats.
-type ComputeWithStatsJSONBody struct {
-	Alpha *float64 `json:"alpha,omitempty"`
-
-	// CheckFreq If given (n), exit criteria are checked every n iterations.
-	// It can be used in conjunction with minIterations
-	// for "modulo n" behavior,
-	// e.g. with minIterations=7 and checkFreq=5
-	// exit criteria are checked after 7/12/17/... iterations.
-	// Default is 1: exit criteria are checked after every iteration.
-	CheckFreq *int `json:"checkFreq,omitempty"`
-
-	// EffectiveInitialTrust Refers to a trust vector.
-	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
-
-	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
-	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
-
-	// EffectivePreTrust Refers to a trust vector.
-	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
-	Epsilon           *float64        `json:"epsilon,omitempty"`
-
-	// FlatTail The length of the flat tail
-	// (ranking unchanged from previous iteration)
-	// that must be seen before terminating the recursion.
-	// 0 means a flat tail need not be seen,
-	// and the recursion is terminated solely based upon epsilon.
-	FlatTail *int `json:"flatTail,omitempty"`
-
-	// GlobalTrust Refers to a trust matrix, such as local trust.
-	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
-
-	// InitialTrust Refers to a trust vector.
-	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
-
-	// LocalTrust Refers to a trust matrix, such as local trust.
-	LocalTrust TrustMatrixRef `json:"localTrust"`
-
-	// MaxIterations The maximum number of iterations after which to stop
-	// even if other termination criteria are not met.
-	// 0 means no limit.
-	MaxIterations *int `json:"maxIterations,omitempty"`
-
-	// MinIterations The minimum number of iterations to perform
-	// even if other termination criteria are met.
-	// Defaults to checkFreq, which in turn defaults to 1.
-	MinIterations *int `json:"minIterations,omitempty"`
-
-	// NumLeaders The number of top-ranking peers to consider
-	// for the purpose of flat-tail algorithm.  0 means everyone.
-	NumLeaders *int `json:"numLeaders,omitempty"`
-
-	// PreTrust Refers to a trust vector.
-	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
-}
 
 // UpdateLocalTrustParams defines parameters for UpdateLocalTrust.
 type UpdateLocalTrustParams struct {
@@ -453,10 +341,10 @@ type UpdateLocalTrustParams struct {
 }
 
 // ComputeJSONRequestBody defines body for Compute for application/json ContentType.
-type ComputeJSONRequestBody ComputeJSONBody
+type ComputeJSONRequestBody = ComputeRequestBody
 
 // ComputeWithStatsJSONRequestBody defines body for ComputeWithStats for application/json ContentType.
-type ComputeWithStatsJSONRequestBody ComputeWithStatsJSONBody
+type ComputeWithStatsJSONRequestBody = ComputeRequestBody
 
 // UpdateLocalTrustJSONRequestBody defines body for UpdateLocalTrust for application/json ContentType.
 type UpdateLocalTrustJSONRequestBody = TrustMatrixRef
@@ -1851,20 +1739,9 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 }
 
-type ComputeWithStatsResponseOKJSONResponse struct {
-	// EigenTrust Refers to a trust vector.
-	EigenTrust TrustVectorRef `json:"eigenTrust"`
+type ComputeWithStatsResponseOKJSONResponse ComputeWithStatsResponseOK
 
-	// FlatTailStats Flat-tail algorithm stats and peer ranking.
-	FlatTailStats FlatTailStats `json:"flatTailStats"`
-}
-
-type InvalidRequestJSONResponse struct {
-	// Message Describes the error in a human-readable message.
-	//
-	// It may be empty.
-	Message string `json:"message"`
-}
+type InvalidRequestJSONResponse InvalidRequest
 
 type ServerNotReadyJSONResponse ServerStatus
 
@@ -2294,87 +2171,88 @@ func (sh *strictHandler) GetStatus(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"gwNLAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
