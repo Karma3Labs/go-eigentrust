@@ -200,7 +200,6 @@ paths:
 components:
   parameters:
     LocalTrustIdParam:
-      summary: Local trust ID
       description: |
         `id` denotes the local trust collection in question.
       name: id
