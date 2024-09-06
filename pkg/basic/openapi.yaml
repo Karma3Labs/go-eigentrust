@@ -611,6 +611,25 @@ components:
                   Default is 1: exit criteria are checked after every iteration.
                 type: integer
                 minimum: 1
+              globalTrust:
+                $ref: "#/components/schemas/TrustMatrixRef"
+                description: |
+                  Where to store the compute result.
+                  If not given, return inline.
+              effectiveLocalTrust:
+                $ref: "#/components/schemas/TrustMatrixRef"
+                description: |
+                  Where to store the effective local trust used for compute.
+                  This is the local trust after canonicalization
+                  and pre-trust substitution (for peers without outbound trust).
+              effectivePreTrust:
+                $ref: "#/components/schemas/TrustVectorRef"
+                description: |
+                  Where to store the effective pre-trust used for compute.
+              effectiveInitialTrust:
+                $ref: "#/components/schemas/TrustVectorRef"
+                description: |
+                  Where to store the effective initial trust used for compute.
           examples:
             Simple1:
               summary: Simple 3-peer example
