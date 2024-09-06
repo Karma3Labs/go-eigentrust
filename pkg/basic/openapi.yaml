@@ -30,22 +30,7 @@ paths:
         $ref: '#/components/requestBodies/ComputeRequestBody'
       responses:
         "200":
-          description: |
-            Successfully computed the EigenTrust scores.
-
-            The response body refers to the EigenTrust vector.
-            This vector can be sorted in descending order of value (`v`)
-            so as to obtain a trust ranking.
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/TrustVectorRef"
-              examples:
-                Simple1:
-                  $ref: "#/components/examples/ComputeResponseSimple1"
-                Simple2:
-                  $ref: "#/components/examples/ComputeResponseSimple2"
-
+          $ref: "#/components/responses/ComputeResponseOK"
         "400":
           $ref: "#/components/responses/InvalidRequest"
   /compute-with-stats:
@@ -120,11 +105,7 @@ paths:
         - $ref: "#/components/parameters/LocalTrustIdParam"
       responses:
         "200":
-          description: The requested local trust contents.
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/InlineTrustMatrix"
+          $ref: "#/components/responses/LocalTrustGetResponseOK"
         "404":
           description: The local trust does not exist.
     head:
@@ -830,6 +811,22 @@ components:
             MissingLocalTrustAndPreTrust:
               $ref: "#/components/examples/ComputeRequestMissingLocalTrustAndPreTrust"
   responses:
+    ComputeResponseOK:
+      description: |
+        Successfully computed the EigenTrust scores.
+
+        The response body refers to the EigenTrust vector.
+        This vector can be sorted in descending order of value (`v`)
+        so as to obtain a trust ranking.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/TrustVectorRef"
+          examples:
+            Simple1:
+              $ref: "#/components/examples/ComputeResponseSimple1"
+            Simple2:
+              $ref: "#/components/examples/ComputeResponseSimple2"
     ComputeWithStatsResponseOK:
       description: |
         Successfully computed the EigenTrust scores.
@@ -840,6 +837,12 @@ components:
         "application/json":
           schema:
             $ref: "#/components/schemas/ComputeWithStatsResponseOK"
+    LocalTrustGetResponseOK:
+      description: The requested local trust contents.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/InlineTrustMatrix"
     InvalidRequest:
       description: |
         Client sent an invalid request.

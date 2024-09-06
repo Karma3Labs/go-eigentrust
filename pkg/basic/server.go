@@ -243,7 +243,8 @@ func (server *StrictServerImpl) Compute(
 		}
 		return nil, err
 	}
-	return Compute200JSONResponse(tv), nil
+	resp := ComputeResponseOKJSONResponse(tv)
+	return Compute200JSONResponse{resp}, nil
 }
 
 func (server *StrictServerImpl) ComputeWithStats(
@@ -290,7 +291,8 @@ func (server *StrictServerImpl) GetLocalTrust(
 		}
 		return nil, err
 	}
-	return GetLocalTrust200JSONResponse(*inline), nil
+	resp := LocalTrustGetResponseOKJSONResponse(*inline)
+	return GetLocalTrust200JSONResponse{resp}, nil
 }
 
 func (server *StrictServerImpl) getLocalTrust(
