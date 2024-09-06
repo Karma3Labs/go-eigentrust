@@ -130,15 +130,6 @@ paths:
         "500":
           $ref: "#/components/responses/ServerNotReady"
 components:
-  parameters:
-    LocalTrustIdParam:
-      description: |
-        `id` denotes the local trust collection in question.
-      name: id
-      in: path
-      required: true
-      schema:
-        $ref: "#/components/schemas/TrustCollectionId"
   schemas:
     TrustCollectionId:
       description: |
@@ -575,6 +566,70 @@ components:
 
             It may be empty.
           type: string
+  responses:
+    ComputeResponseOK:
+      description: |
+        Successfully computed the EigenTrust scores.
+
+        The response body refers to the EigenTrust vector.
+        This vector can be sorted in descending order of value (`v`)
+        so as to obtain a trust ranking.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/TrustVectorRef"
+          examples:
+            Simple1:
+              $ref: "#/components/examples/ComputeResponseSimple1"
+            Simple2:
+              $ref: "#/components/examples/ComputeResponseSimple2"
+    ComputeWithStatsResponseOK:
+      description: |
+        Successfully computed the EigenTrust scores.
+
+        The response body contains the computed scores as well as various
+        statistics and rankings (many related to the flat-tail algorithm).
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ComputeWithStatsResponseOK"
+    LocalTrustGetResponseOK:
+      description: The requested local trust contents.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/InlineTrustMatrix"
+    InvalidRequest:
+      description: |
+        Client sent an invalid request.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/InvalidRequest"
+          examples:
+            Example1:
+              $ref: "#/components/examples/InvalidRequestExample1"
+    ServerReady:
+      description: Server is ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
+    ServerNotReady:
+      description: Server is not ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
+  parameters:
+    LocalTrustIdParam:
+      description: |
+        `id` denotes the local trust collection in question.
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/TrustCollectionId"
   examples:
     ComputeRequestSimple1:
       summary: Simple 3-peer example
@@ -810,58 +865,3 @@ components:
               $ref: "#/components/examples/ComputeRequestMissingLocalTrust"
             MissingLocalTrustAndPreTrust:
               $ref: "#/components/examples/ComputeRequestMissingLocalTrustAndPreTrust"
-  responses:
-    ComputeResponseOK:
-      description: |
-        Successfully computed the EigenTrust scores.
-
-        The response body refers to the EigenTrust vector.
-        This vector can be sorted in descending order of value (`v`)
-        so as to obtain a trust ranking.
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/TrustVectorRef"
-          examples:
-            Simple1:
-              $ref: "#/components/examples/ComputeResponseSimple1"
-            Simple2:
-              $ref: "#/components/examples/ComputeResponseSimple2"
-    ComputeWithStatsResponseOK:
-      description: |
-        Successfully computed the EigenTrust scores.
-
-        The response body contains the computed scores as well as various
-        statistics and rankings (many related to the flat-tail algorithm).
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/ComputeWithStatsResponseOK"
-    LocalTrustGetResponseOK:
-      description: The requested local trust contents.
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/InlineTrustMatrix"
-    InvalidRequest:
-      description: |
-        Client sent an invalid request.
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/InvalidRequest"
-          examples:
-            Example1:
-              $ref: "#/components/examples/InvalidRequestExample1"
-    ServerReady:
-      description: Server is ready to take requests.
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/ServerStatus"
-    ServerNotReady:
-      description: Server is not ready to take requests.
-      content:
-        "application/json":
-          schema:
-            $ref: "#/components/schemas/ServerStatus"
