@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
 	"k3l.io/go-eigentrust/pkg/basic"
@@ -25,6 +26,7 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			ctx = logger.WithContext(ctx)
 			e := echo.New()
 			eLogger := lecho.From(logger)
 			e.Logger = eLogger
@@ -33,7 +35,7 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server, err := basic.NewStrictServerImpl(ctx, logger)
+			server, err := basic.NewStrictServerImpl(ctx)
 			if err != nil {
 				logger.Err(err).Msg("cannot create server implementation")
 				return
@@ -58,6 +60,7 @@ var (
 				}
 				listenAddress = fmt.Sprintf("%s:%d", addr, port)
 			}
+			zerolog.DefaultContextLogger = &logger
 			if tls {
 				err = e.StartTLS(listenAddress, certPathname, keyPathname)
 			} else {

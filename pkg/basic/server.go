@@ -33,15 +33,12 @@ type StrictServerImpl struct {
 	UseFileURI          bool
 }
 
-func NewStrictServerImpl(
-	ctx context.Context, logger zerolog.Logger,
-) (*StrictServerImpl, error) {
+func NewStrictServerImpl(ctx context.Context) (*StrictServerImpl, error) {
 	awsConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load AWS config: %w", err)
 	}
 	return &StrictServerImpl{
-		logger:           logger,
 		storedLocalTrust: make(map[TrustCollectionId]*sparse.Matrix),
 		awsConfig:        awsConfig,
 		UseFileURI:       false,
@@ -74,9 +71,7 @@ func (server *StrictServerImpl) compute(
 	flatTail *int, numLeaders *int,
 	maxIterations *int, minIterations *int, checkFreq *int,
 ) (tv TrustVectorRef, flatTailStats FlatTailStats, err error) {
-	logger := server.logger.With().
-		Str("func", "(*StrictServerImpl).Compute").
-		Logger()
+	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
 	var (
 		c  *sparse.Matrix
 		p  *sparse.Vector
@@ -224,7 +219,6 @@ func (server *StrictServerImpl) compute(
 func (server *StrictServerImpl) Compute(
 	ctx context.Context, request ComputeRequestObject,
 ) (ComputeResponseObject, error) {
-	ctx = server.logger.WithContext(ctx)
 	req := request.Body
 
 	tv, _, err := server.compute(ctx,
@@ -250,7 +244,6 @@ func (server *StrictServerImpl) Compute(
 func (server *StrictServerImpl) ComputeWithStats(
 	ctx context.Context, request ComputeWithStatsRequestObject,
 ) (ComputeWithStatsResponseObject, error) {
-	ctx = server.logger.WithContext(ctx)
 	req := request.Body
 	tv, flatTailStats, err := server.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
@@ -325,7 +318,7 @@ func (server *StrictServerImpl) getLocalTrust(
 }
 
 func (server *StrictServerImpl) HeadLocalTrust(
-	_ context.Context, request HeadLocalTrustRequestObject,
+	ctx context.Context, request HeadLocalTrustRequestObject,
 ) (HeadLocalTrustResponseObject, error) {
 	server.storedLocalTrustMtx.Lock()
 	defer server.storedLocalTrustMtx.Unlock()
@@ -339,10 +332,7 @@ func (server *StrictServerImpl) HeadLocalTrust(
 func (server *StrictServerImpl) UpdateLocalTrust(
 	ctx context.Context, request UpdateLocalTrustRequestObject,
 ) (UpdateLocalTrustResponseObject, error) {
-	logger := server.logger.With().
-		Str("func", "(*StrictServerImpl).UpdateLocalTrust").
-		Str("localTrustId", request.Id).
-		Logger()
+	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
 	c, err := server.loadTrustMatrix(ctx, request.Body)
 	if err != nil {
 		return nil, HTTPError{
@@ -375,7 +365,7 @@ func (server *StrictServerImpl) UpdateLocalTrust(
 }
 
 func (server *StrictServerImpl) DeleteLocalTrust(
-	_ context.Context, request DeleteLocalTrustRequestObject,
+	ctx context.Context, request DeleteLocalTrustRequestObject,
 ) (DeleteLocalTrustResponseObject, error) {
 	if !server.deleteStoredLocalTrust(request.Id) {
 		return DeleteLocalTrust404Response{}, nil
