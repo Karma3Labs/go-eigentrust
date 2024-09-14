@@ -381,22 +381,19 @@ func (server *StrictServerImpl) loadTrustMatrix(
 	case TrustMatrixRefSchemeInline:
 		inline, err := ref.AsInlineTrustMatrix()
 		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse inline local trust reference: %w", err)
+			return nil, err
 		}
 		return server.loadInlineTrustMatrix(&inline)
 	case TrustMatrixRefSchemeStored:
 		stored, err := ref.AsStoredTrustMatrix()
 		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse stored local trust reference: %w", err)
+			return nil, err
 		}
 		return server.loadStoredTrustMatrix(&stored)
 	case TrustMatrixRefSchemeObjectstorage:
 		objectStorage, err := ref.AsObjectStorageTrustMatrix()
 		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse object storage local trust reference: %w", err)
+			return nil, err
 		}
 		return server.loadObjectStorageTrustMatrix(ctx, &objectStorage)
 	default:
@@ -542,15 +539,13 @@ func (server *StrictServerImpl) loadTrustVector(
 	case Inline:
 		inline, err := ref.AsInlineTrustVector()
 		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse inline trust vector reference: %w", err)
+			return nil, err
 		}
 		return loadInlineTrustVector(&inline)
 	case Objectstorage:
 		objectStorage, err := ref.AsObjectStorageTrustVector()
 		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse object storage trust vector reference: %w", err)
+			return nil, err
 		}
 		return server.loadObjectStorageTrustVector(ctx, &objectStorage)
 	default:
