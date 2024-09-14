@@ -456,7 +456,7 @@ components:
           items:
             type: integer
             minimum: 0
-    ComputeRequestBody:
+    ComputeParams:
       type: object
       required:
         - localTrust
@@ -517,6 +517,11 @@ components:
             Default is 1: exit criteria are checked after every iteration.
           type: integer
           minimum: 1
+    ComputeRequestParams:
+      type: object
+      required:
+        - localTrust
+      properties:
         globalTrust:
           $ref: "#/components/schemas/TrustMatrixRef"
           description: |
@@ -536,6 +541,11 @@ components:
           $ref: "#/components/schemas/TrustVectorRef"
           description: |
             Where to store the effective initial trust used for compute.
+    ComputeRequestBody:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ComputeParams"
+        - $ref: "#/components/schemas/ComputeRequestParams"
     ComputeWithStatsResponseOK:
       type: object
       required:
