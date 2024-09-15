@@ -9,8 +9,9 @@ import (
 )
 
 type Core struct {
-	storedTrustMatrix NamedTrustMatrices
-	awsConfig         aws.Config
+	StoredTrustMatrices NamedTrustMatrices
+	StoredTrustVectors  NamedTrustVectors
+	awsConfig           aws.Config
 }
 
 func NewCore(ctx context.Context) (*Core, error) {

@@ -278,7 +278,7 @@ func (server *OAPIStrictServerImpl) GetLocalTrust(
 func (server *OAPIStrictServerImpl) getLocalTrust(
 	_ context.Context, id openapi.TrustCollectionId,
 ) (*openapi.InlineTrustMatrix, error) {
-	tm, ok := server.core.storedTrustMatrix.Load(id)
+	tm, ok := server.core.StoredTrustMatrices.Load(id)
 	if !ok {
 		return nil, HTTPError{Code: 404}
 	}
@@ -286,11 +286,10 @@ func (server *OAPIStrictServerImpl) getLocalTrust(
 		result openapi.InlineTrustMatrix
 		err    error
 	)
-	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
+	err = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
 		result.Size, err = c.Dim()
 		if err != nil {
-			err = fmt.Errorf("cannot get dimension: %w", err)
-			return
+			return fmt.Errorf("cannot get dimension: %w", err)
 		}
 		result.Entries = make([]openapi.InlineTrustMatrixEntry, 0, c.NNZ())
 		for i, row := range c.Entries {
@@ -303,6 +302,7 @@ func (server *OAPIStrictServerImpl) getLocalTrust(
 					})
 			}
 		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -313,7 +313,7 @@ func (server *OAPIStrictServerImpl) getLocalTrust(
 func (server *OAPIStrictServerImpl) HeadLocalTrust(
 	ctx context.Context, request openapi.HeadLocalTrustRequestObject,
 ) (openapi.HeadLocalTrustResponseObject, error) {
-	_, ok := server.core.storedTrustMatrix.Load(request.Id)
+	_, ok := server.core.StoredTrustMatrices.Load(request.Id)
 	if !ok {
 		return openapi.HeadLocalTrust404Response{}, nil
 	} else {
@@ -344,15 +344,16 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 		created bool
 	)
 	if request.Params.Merge != nil && *request.Params.Merge {
-		tm, created = server.core.storedTrustMatrix.Merge(request.Id, c)
+		tm, created = server.core.StoredTrustMatrices.Merge(request.Id, c)
 	} else {
-		tm, created = server.core.storedTrustMatrix.Set(request.Id, c)
+		tm, created = server.core.StoredTrustMatrices.Set(request.Id, c)
 	}
-	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
-		err = c.Mmap(ctx)
-		if err != nil {
-			logger.Err(err).Msg("cannot swap out local trust")
+	_ = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
+		err1 := c.Mmap(ctx)
+		if err1 != nil {
+			logger.Err(err1).Msg("cannot swap out local trust")
 		}
+		return nil
 	})
 	if created {
 		return openapi.UpdateLocalTrust201Response{}, nil
@@ -364,7 +365,7 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 func (server *OAPIStrictServerImpl) DeleteLocalTrust(
 	ctx context.Context, request openapi.DeleteLocalTrustRequestObject,
 ) (openapi.DeleteLocalTrustResponseObject, error) {
-	_, deleted := server.core.storedTrustMatrix.LoadAndDelete(request.Id)
+	_, deleted := server.core.StoredTrustMatrices.LoadAndDelete(request.Id)
 	if !deleted {
 		return openapi.DeleteLocalTrust404Response{}, nil
 	}
@@ -431,14 +432,15 @@ func (server *OAPIStrictServerImpl) loadInlineTrustMatrix(
 func (server *OAPIStrictServerImpl) loadStoredTrustMatrix(
 	stored *openapi.StoredTrustMatrix,
 ) (c *sparse.Matrix, err error) {
-	tm0, ok := server.core.storedTrustMatrix.Load(stored.Id)
+	tm0, ok := server.core.StoredTrustMatrices.Load(stored.Id)
 	if ok {
 		// Caller may modify returned c in-place (canonicalize, size-match)
 		// so return a disposable copy, preserving the original.
 		// This is slow: It takes ~3s to copy 16M nonzero entries.
 		// TODO(ek): Implement on-demand canonicalization and remove this.
-		tm0.LockAndRun(func(c0 *sparse.Matrix, timestamp *big.Int) {
+		_ = tm0.LockAndRun(func(c0 *sparse.Matrix, timestamp *big.Int) error {
 			c = deepcopy.Copy(c0).(*sparse.Matrix)
+			return nil
 		})
 	} else {
 		err = HTTPError{400, errors.New("trust matrix not found")}
