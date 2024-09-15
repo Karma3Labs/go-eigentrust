@@ -11,4 +11,4 @@ COPY . .
 RUN go build -o /app/build/main cmd/eigentrust/main.go
 
 EXPOSE 80
-CMD [ "/app/build/main", "serve" ]
+CMD [ "/app/build/main", "serve", "-F" ]

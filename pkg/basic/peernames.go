@@ -1,10 +1,10 @@
 package basic
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 func ReadPeerNamesFromCsv(reader CsvReader) (
@@ -15,12 +15,11 @@ func ReadPeerNamesFromCsv(reader CsvReader) (
 	for fields, err = reader.Read(); err == nil; fields, err = reader.Read() {
 		index := len(names)
 		if len(fields) < 1 {
-			return nil, nil, errors.Errorf("missing peer name (record #%d)",
-				index)
+			return nil, nil, fmt.Errorf("missing peer name (record #%d)", index)
 		}
 		name := fields[0]
 		if existing, duplicate := indices[name]; duplicate {
-			return nil, nil, errors.Errorf("duplicate peer name (records #%d and #%d)",
+			return nil, nil, fmt.Errorf("duplicate peer name (records #%d and #%d)",
 				existing, index)
 		}
 		names = append(names, name)
@@ -44,7 +43,7 @@ func ParsePeerId(s string, peerIndices map[string]int) (index int, err error) {
 		}
 	} else {
 		if index, err = strconv.Atoi(s); err != nil {
-			err = errors.Wrap(err, "invalid peer index literal")
+			err = fmt.Errorf("invalid peer index literal: %w", err)
 		} else if index < 0 {
 			err = errors.New("negative peer index")
 		}

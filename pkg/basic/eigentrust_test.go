@@ -3,7 +3,7 @@ package basic
 import (
 	"testing"
 
-	"github.com/magiconair/properties/assert"
+	"github.com/stretchr/testify/assert"
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
@@ -70,7 +70,8 @@ func TestDiscountTrustVector(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			DiscountTrustVector(tt.args.t, tt.args.discounts)
+			err := DiscountTrustVector(tt.args.t, tt.args.discounts)
+			assert.Nil(t, err)
 			assert.Equal(t, tt.args.t, tt.expected)
 		})
 	}

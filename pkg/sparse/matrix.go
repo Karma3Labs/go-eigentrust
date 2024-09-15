@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -155,7 +154,7 @@ func mergeSpan(s1, s2 []Entry) []Entry {
 // m2 is reset after merge.
 func (m *CSMatrix) Merge(m2 *CSMatrix) {
 	// Load m2 back into memory, we are about to merge/reuse its spans in m.
-	m2.Munmap()
+	_ = m2.Munmap()
 
 	m.SetMajorDim(max(m.MajorDim, m2.MajorDim)) // also resizes m.Entries
 	m.SetMinorDim(max(m.MinorDim, m2.MinorDim))
@@ -201,11 +200,11 @@ func (m *CSMatrix) Mmap(ctx context.Context) error {
 	}
 	nnz := m.NNZ()
 	if int(uintptr(nnz)) != nnz {
-		return errors.Errorf("matrix too big (%#v entries)", nnz)
+		return fmt.Errorf("matrix too big (%#v entries)", nnz)
 	}
 	size := unsafe.Sizeof(Entry{}) * uintptr(nnz)
 	if uintptr(int(size)) != size || int64(size) < 0 {
-		return errors.Errorf("matrix data too big (%#v bytes)", size)
+		return fmt.Errorf("matrix data too big (%#v bytes)", size)
 	}
 	tmpdir := os.Getenv("TMPDIR")
 	if tmpdir == "" {

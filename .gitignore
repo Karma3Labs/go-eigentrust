@@ -129,3 +129,11 @@ tags
 
 # Python bytecode cache
 __pycache__/
+
+# eigentrust basic compute input/output files
+*.csv
+*.json
+
+# patch(1) byproducts
+*.orig
+*.rej

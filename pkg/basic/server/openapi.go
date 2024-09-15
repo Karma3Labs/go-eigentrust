@@ -4,45 +4,69 @@ import "C"
 
 import (
 	"context"
+	"encoding/csv"
+	"errors"
+	"fmt"
 	"math/big"
+	"net/url"
+	"os"
+	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mohae/deepcopy"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
 	"k3l.io/go-eigentrust/pkg/basic"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 type OAPIStrictServerImpl struct {
-	core *Core
+	core       *Core
+	UseFileURI bool
 }
 
-func NewOAPIStrictServerImpl(logger zerolog.Logger) *OAPIStrictServerImpl {
-	return &OAPIStrictServerImpl{
-		core: NewCore(logger),
+func NewOAPIStrictServerImpl(ctx context.Context) (
+	*OAPIStrictServerImpl, error,
+) {
+	core, err := NewCore(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create server core: %w", err)
 	}
+	return &OAPIStrictServerImpl{
+		core:       core,
+		UseFileURI: false,
+	}, nil
+}
+
+func (server *OAPIStrictServerImpl) GetStatus(
+	context.Context, openapi.GetStatusRequestObject,
+) (openapi.GetStatusResponseObject, error) {
+	return openapi.GetStatus200JSONResponse{
+		openapi.ServerReadyJSONResponse{Message: "OK"},
+	}, nil
 }
 
 func (server *OAPIStrictServerImpl) compute(
-	ctx context.Context, localTrustRef *openapi.LocalTrustRef,
+	ctx context.Context, localTrustRef *openapi.TrustMatrixRef,
 	initialTrust *openapi.TrustVectorRef, preTrust *openapi.TrustVectorRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
-	maxIterations *int,
-) (tv openapi.TrustVectorRef, flatTailStats basic.FlatTailStats, err error) {
-	logger := server.core.logger.With().
-		Str("func", "(*OAPIStrictServerImpl).Compute").
-		Logger()
+	maxIterations *int, minIterations *int, checkFreq *int,
+) (tv openapi.TrustVectorRef, flatTailStats openapi.FlatTailStats, err error) {
+	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
 	var (
 		c  *sparse.Matrix
 		p  *sparse.Vector
 		t0 *sparse.Vector
 	)
 	opts := []basic.ComputeOpt{basic.WithFlatTailStats(&flatTailStats)}
-	if c, err = server.loadLocalTrust(localTrustRef); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load local trust")}
+	if c, err = server.loadTrustMatrix(ctx, localTrustRef); err != nil {
+		err = HTTPError{400, fmt.Errorf("cannot load local trust: %w", err)}
 		return
 	}
 	cDim, err := c.Dim()
@@ -56,8 +80,8 @@ func (server *OAPIStrictServerImpl) compute(
 	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
-	} else if p, err = loadTrustVector(preTrust); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load pre-trust")}
+	} else if p, err = server.loadTrustVector(ctx, preTrust); err != nil {
+		err = HTTPError{400, fmt.Errorf("cannot load pre-trust: %w", err)}
 		return
 	} else {
 		// align dimensions
@@ -75,8 +99,8 @@ func (server *OAPIStrictServerImpl) compute(
 		Msg("pre-trust loaded")
 	if initialTrust == nil {
 		t0 = nil
-	} else if t0, err = loadTrustVector(initialTrust); err != nil {
-		err = HTTPError{400, errors.Wrap(err, "cannot load initial trust")}
+	} else if t0, err = server.loadTrustVector(ctx, initialTrust); err != nil {
+		err = HTTPError{400, fmt.Errorf("cannot load initial trust: %w", err)}
 		return
 	} else {
 		// align dimensions
@@ -99,7 +123,7 @@ func (server *OAPIStrictServerImpl) compute(
 		alpha = &a
 	} else if *alpha < 0 || *alpha > 1 {
 		err = HTTPError{
-			400, errors.Errorf("alpha=%f out of range [0..1]", *alpha),
+			400, fmt.Errorf("alpha=%f out of range [0..1]", *alpha),
 		}
 		return
 	}
@@ -108,7 +132,7 @@ func (server *OAPIStrictServerImpl) compute(
 		epsilon = &e
 	} else if *epsilon <= 0 || *epsilon > 1 {
 		err = HTTPError{
-			400, errors.Errorf("epsilon=%f out of range (0..1]", *epsilon),
+			400, fmt.Errorf("epsilon=%f out of range (0..1]", *epsilon),
 		}
 		return
 	}
@@ -121,6 +145,12 @@ func (server *OAPIStrictServerImpl) compute(
 	if maxIterations != nil {
 		opts = append(opts, basic.WithMaxIterations(*maxIterations))
 	}
+	if minIterations != nil {
+		opts = append(opts, basic.WithMinIterations(*minIterations))
+	}
+	if checkFreq != nil {
+		opts = append(opts, basic.WithCheckFreq(*checkFreq))
+	}
 	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
 		basic.CanonicalizeTrustVector(t0)
@@ -128,21 +158,21 @@ func (server *OAPIStrictServerImpl) compute(
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot extract discounts"),
+			400, fmt.Errorf("cannot extract discounts: %w", err),
 		}
 		return
 	}
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot canonicalize local trust"),
+			400, fmt.Errorf("cannot canonicalize local trust: %w", err),
 		}
 		return
 	}
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = HTTPError{
-			400, errors.Wrapf(err, "cannot canonicalize discounts"),
+			400, fmt.Errorf("cannot canonicalize discounts: %w", err),
 		}
 		return
 	}
@@ -151,19 +181,23 @@ func (server *OAPIStrictServerImpl) compute(
 	p = nil
 	runtime.GC()
 	if err != nil {
-		err = errors.Wrapf(err, "cannot compute EigenTrust")
+		err = fmt.Errorf("cannot compute EigenTrust: %w", err)
 		return
 	}
-	basic.DiscountTrustVector(t, discounts)
-	var itv openapi.InlineTrustVector
-	itv.Scheme = "inline" // FIXME(ek): can we not hard-code this?
-	itv.Size = t.Dim
+	if err = basic.DiscountTrustVector(t, discounts); err != nil {
+		err = fmt.Errorf("cannot apply local trust discounts: %w", err)
+		return
+	}
+	itv := openapi.InlineTrustVector{
+		Scheme: openapi.InlineTrustVectorSchemeInline,
+		Size:   t.Dim,
+	}
 	for _, e := range t.Entries {
 		itv.Entries = append(itv.Entries,
 			openapi.InlineTrustVectorEntry{I: e.Index, V: e.Value})
 	}
 	if err = tv.FromInlineTrustVector(itv); err != nil {
-		err = errors.Wrapf(err, "cannot create response")
+		err = fmt.Errorf("cannot create response: %w", err)
 		return
 	}
 	return tv, flatTailStats, nil
@@ -172,15 +206,15 @@ func (server *OAPIStrictServerImpl) compute(
 func (server *OAPIStrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
-	ctx = server.core.logger.WithContext(ctx)
+	req := request.Body
+
 	tv, _, err := server.compute(ctx,
-		&request.Body.LocalTrust,
-		request.Body.InitialTrust, request.Body.PreTrust,
-		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders,
-		request.Body.MaxIterations)
+		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
+		req.FlatTail, req.NumLeaders,
+		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
 				var resp openapi.Compute400JSONResponse
@@ -190,21 +224,21 @@ func (server *OAPIStrictServerImpl) Compute(
 		}
 		return nil, err
 	}
-	return openapi.Compute200JSONResponse(tv), nil
+	resp := openapi.ComputeResponseOKJSONResponse(tv)
+	return openapi.Compute200JSONResponse{resp}, nil
 }
 
 func (server *OAPIStrictServerImpl) ComputeWithStats(
 	ctx context.Context, request openapi.ComputeWithStatsRequestObject,
 ) (openapi.ComputeWithStatsResponseObject, error) {
-	ctx = server.core.logger.WithContext(ctx)
+	req := request.Body
 	tv, flatTailStats, err := server.compute(ctx,
-		&request.Body.LocalTrust,
-		request.Body.InitialTrust, request.Body.PreTrust,
-		request.Body.Alpha, request.Body.Epsilon,
-		request.Body.FlatTail, request.Body.NumLeaders,
-		request.Body.MaxIterations)
+		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
+		req.FlatTail, req.NumLeaders,
+		req.MaxIterations, req.MinIterations, req.CheckFreq)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 400:
 				var resp openapi.ComputeWithStats400JSONResponse
@@ -228,7 +262,8 @@ func (server *OAPIStrictServerImpl) GetLocalTrust(
 ) (openapi.GetLocalTrustResponseObject, error) {
 	inline, err := server.getLocalTrust(ctx, request.Id)
 	if err != nil {
-		if httpError, ok := err.(HTTPError); ok {
+		var httpError HTTPError
+		if errors.As(err, &httpError) {
 			switch httpError.Code {
 			case 404:
 				return openapi.GetLocalTrust404Response{}, nil
@@ -236,31 +271,32 @@ func (server *OAPIStrictServerImpl) GetLocalTrust(
 		}
 		return nil, err
 	}
-	return openapi.GetLocalTrust200JSONResponse(*inline), nil
+	resp := openapi.LocalTrustGetResponseOKJSONResponse(*inline)
+	return openapi.GetLocalTrust200JSONResponse{resp}, nil
 }
 
 func (server *OAPIStrictServerImpl) getLocalTrust(
-	_ context.Context, id openapi.LocalTrustId,
-) (*openapi.InlineLocalTrust, error) {
-	tm, ok := server.core.storedLocalTrust.Load(id)
+	_ context.Context, id openapi.TrustCollectionId,
+) (*openapi.InlineTrustMatrix, error) {
+	tm, ok := server.core.storedTrustMatrix.Load(id)
 	if !ok {
 		return nil, HTTPError{Code: 404}
 	}
 	var (
-		result openapi.InlineLocalTrust
+		result openapi.InlineTrustMatrix
 		err    error
 	)
 	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
 		result.Size, err = c.Dim()
 		if err != nil {
-			err = errors.Wrapf(err, "cannot get dimension")
+			err = fmt.Errorf("cannot get dimension: %w", err)
 			return
 		}
-		result.Entries = make([]openapi.InlineLocalTrustEntry, 0, c.NNZ())
+		result.Entries = make([]openapi.InlineTrustMatrixEntry, 0, c.NNZ())
 		for i, row := range c.Entries {
 			for _, entry := range row {
 				result.Entries = append(result.Entries,
-					openapi.InlineLocalTrustEntry{
+					openapi.InlineTrustMatrixEntry{
 						I: i,
 						J: entry.Index,
 						V: entry.Value,
@@ -277,7 +313,7 @@ func (server *OAPIStrictServerImpl) getLocalTrust(
 func (server *OAPIStrictServerImpl) HeadLocalTrust(
 	ctx context.Context, request openapi.HeadLocalTrustRequestObject,
 ) (openapi.HeadLocalTrustResponseObject, error) {
-	_, ok := server.core.storedLocalTrust.Load(request.Id)
+	_, ok := server.core.storedTrustMatrix.Load(request.Id)
 	if !ok {
 		return openapi.HeadLocalTrust404Response{}, nil
 	} else {
@@ -288,17 +324,16 @@ func (server *OAPIStrictServerImpl) HeadLocalTrust(
 func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 	ctx context.Context, request openapi.UpdateLocalTrustRequestObject,
 ) (openapi.UpdateLocalTrustResponseObject, error) {
-	logger := server.core.logger.With().
-		Str("func", "(*OAPIStrictServerImpl).UpdateLocalTrust").
-		Str("localTrustId", request.Id).
-		Logger()
-	c, err := server.loadLocalTrust(request.Body)
+	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
+	c, err := server.loadTrustMatrix(ctx, request.Body)
 	if err != nil {
-		return nil, HTTPError{400, errors.Wrap(err, "cannot load local trust")}
+		return nil, HTTPError{
+			400, fmt.Errorf("cannot load local trust: %w", err),
+		}
 	}
 	cDim, err := c.Dim()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot get dimension")
+		return nil, fmt.Errorf("cannot get dimension: %w", err)
 	}
 	logger.Trace().
 		Int("dim", cDim).
@@ -309,9 +344,9 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 		created bool
 	)
 	if request.Params.Merge != nil && *request.Params.Merge {
-		tm, created = server.core.storedLocalTrust.Merge(request.Id, c)
+		tm, created = server.core.storedTrustMatrix.Merge(request.Id, c)
 	} else {
-		tm, created = server.core.storedLocalTrust.Set(request.Id, c)
+		tm, created = server.core.storedTrustMatrix.Set(request.Id, c)
 	}
 	tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) {
 		err = c.Mmap(ctx)
@@ -329,51 +364,55 @@ func (server *OAPIStrictServerImpl) UpdateLocalTrust(
 func (server *OAPIStrictServerImpl) DeleteLocalTrust(
 	ctx context.Context, request openapi.DeleteLocalTrustRequestObject,
 ) (openapi.DeleteLocalTrustResponseObject, error) {
-	_, deleted := server.core.storedLocalTrust.LoadAndDelete(request.Id)
+	_, deleted := server.core.storedTrustMatrix.LoadAndDelete(request.Id)
 	if !deleted {
 		return openapi.DeleteLocalTrust404Response{}, nil
 	}
 	return openapi.DeleteLocalTrust204Response{}, nil
 }
 
-func (server *OAPIStrictServerImpl) loadLocalTrust(
-	ref *openapi.LocalTrustRef,
+func (server *OAPIStrictServerImpl) loadTrustMatrix(
+	ctx context.Context,
+	ref *openapi.TrustMatrixRef,
 ) (*sparse.Matrix, error) {
 	switch ref.Scheme {
-	case "inline":
-		inline, err := ref.AsInlineLocalTrust()
+	case openapi.TrustMatrixRefSchemeInline:
+		inline, err := ref.AsInlineTrustMatrix()
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"cannot parse inline local trust reference")
+			return nil, err
 		}
-		return server.loadInlineLocalTrust(&inline)
-	case "stored":
-		stored, err := ref.AsStoredLocalTrust()
+		return server.loadInlineTrustMatrix(&inline)
+	case openapi.TrustMatrixRefSchemeStored:
+		stored, err := ref.AsStoredTrustMatrix()
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"cannot parse stored local trust reference")
+			return nil, err
 		}
-		return server.loadStoredLocalTrust(&stored)
+		return server.loadStoredTrustMatrix(&stored)
+	case openapi.TrustMatrixRefSchemeObjectstorage:
+		objectStorage, err := ref.AsObjectStorageTrustMatrix()
+		if err != nil {
+			return nil, err
+		}
+		return server.loadObjectStorageTrustMatrix(ctx, &objectStorage)
 	default:
-		return nil, errors.Errorf("unknown local trust ref type %#v",
-			ref.Scheme)
+		return nil, fmt.Errorf("unknown local trust ref type %#v", ref.Scheme)
 	}
 }
 
-func (server *OAPIStrictServerImpl) loadInlineLocalTrust(
-	inline *openapi.InlineLocalTrust,
+func (server *OAPIStrictServerImpl) loadInlineTrustMatrix(
+	inline *openapi.InlineTrustMatrix,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
-		return nil, errors.Errorf("invalid size=%#v", inline.Size)
+		return nil, fmt.Errorf("invalid size=%#v", inline.Size)
 	}
 	var entries []sparse.CooEntry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
-			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
 				idx, entry.I, inline.Size)
 		}
 		if entry.J < 0 || entry.J >= inline.Size {
-			return nil, errors.Errorf("entry %d: j=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: j=%d is out of range [0..%d)",
 				idx, entry.J, inline.Size)
 		}
 		entries = append(entries, sparse.CooEntry{
@@ -389,10 +428,10 @@ func (server *OAPIStrictServerImpl) loadInlineLocalTrust(
 	return sparse.NewCSRMatrix(size, size, entries), nil
 }
 
-func (server *OAPIStrictServerImpl) loadStoredLocalTrust(
-	stored *openapi.StoredLocalTrust,
+func (server *OAPIStrictServerImpl) loadStoredTrustMatrix(
+	stored *openapi.StoredTrustMatrix,
 ) (c *sparse.Matrix, err error) {
-	tm0, ok := server.core.storedLocalTrust.Load(stored.Id)
+	tm0, ok := server.core.storedTrustMatrix.Load(stored.Id)
 	if ok {
 		// Caller may modify returned c in-place (canonicalize, size-match)
 		// so return a disposable copy, preserving the original.
@@ -402,16 +441,115 @@ func (server *OAPIStrictServerImpl) loadStoredLocalTrust(
 			c = deepcopy.Copy(c0).(*sparse.Matrix)
 		})
 	} else {
-		err = HTTPError{400, errors.New("local trust not found")}
+		err = HTTPError{400, errors.New("trust matrix not found")}
 	}
 	return
 }
 
-func loadTrustVector(ref *openapi.TrustVectorRef) (*sparse.Vector, error) {
-	if inline, err := ref.AsInlineTrustVector(); err == nil {
-		return loadInlineTrustVector(&inline)
+func (server *OAPIStrictServerImpl) loadObjectStorageTrustMatrix(
+	ctx context.Context, ref *openapi.ObjectStorageTrustMatrix,
+) (*sparse.Matrix, error) {
+	u, err := url.Parse(ref.Url)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse object storage URL: %w", err)
 	}
-	return nil, errors.New("unknown trust vector type")
+	switch strings.ToLower(u.Scheme) {
+	case "s3":
+		bucket := u.Host
+		path := strings.TrimPrefix(u.Path, "/")
+		return server.loadS3TrustMatrix(ctx, bucket, path)
+	case "file":
+		if !server.UseFileURI {
+			return nil, fmt.Errorf("file: URI is disabled in this server")
+		}
+		return server.loadFileTrustMatrix(u.Path)
+	default:
+		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
+			u.Scheme)
+	}
+}
+
+func (server *OAPIStrictServerImpl) loadS3TrustMatrix(
+	ctx context.Context, bucket string, key string,
+) (*sparse.Matrix, error) {
+	res, err := server.core.loadS3Object(ctx, bucket, key)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load trust matrix from S3: %w", err)
+	}
+	defer util.Close(res.Body)
+	return server.loadCsvTrustMatrix(csv.NewReader(res.Body))
+}
+
+func (server *OAPIStrictServerImpl) loadFileTrustMatrix(
+	path string,
+) (*sparse.Matrix, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer util.Close(f)
+	return server.loadCsvTrustMatrix(csv.NewReader(f))
+}
+
+func (server *OAPIStrictServerImpl) loadCsvTrustMatrix(
+	r *csv.Reader,
+) (*sparse.Matrix, error) {
+	header, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read CSV header: %w", err)
+	}
+	if !reflect.DeepEqual(header, []string{"i", "j", "v"}) {
+		return nil, fmt.Errorf("invalid CSV header %#v", header)
+	}
+	var entries []sparse.CooEntry
+	var size = 0
+	for record, err := r.Read(); err == nil; record, err = r.Read() {
+		if len(record) != 3 {
+			return nil, fmt.Errorf("invalid CSV record %#v", record)
+		}
+		i, err := strconv.Atoi(record[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid i=%#v: %w", record[0], err)
+		}
+		j, err := strconv.Atoi(record[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid j=%#v: %w", record[1], err)
+		}
+		v, err := strconv.ParseFloat(record[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid v=%#v: %w", record[2], err)
+		}
+		if size < i+1 {
+			size = i + 1
+		}
+		if size < j+1 {
+			size = j + 1
+		}
+		entries = append(entries, sparse.CooEntry{Row: i, Column: j, Value: v})
+	}
+	return sparse.NewCSRMatrix(size, size, entries), nil
+}
+
+func (server *OAPIStrictServerImpl) loadTrustVector(
+	ctx context.Context,
+	ref *openapi.TrustVectorRef,
+) (*sparse.Vector, error) {
+	switch ref.Scheme {
+	case openapi.Inline:
+		inline, err := ref.AsInlineTrustVector()
+		if err != nil {
+			return nil, err
+		}
+		return loadInlineTrustVector(&inline)
+	case openapi.Objectstorage:
+		objectStorage, err := ref.AsObjectStorageTrustVector()
+		if err != nil {
+			return nil, err
+		}
+		return server.loadObjectStorageTrustVector(ctx, &objectStorage)
+	default:
+		return nil, fmt.Errorf("unknown trust vector ref type %#v", ref.Scheme)
+	}
 }
 
 func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
@@ -420,11 +558,11 @@ func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
 	var entries []sparse.Entry
 	for idx, entry := range inline.Entries {
 		if entry.I < 0 || entry.I >= inline.Size {
-			return nil, errors.Errorf("entry %d: i=%d is out of range [0..%d)",
+			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
 				idx, entry.I, inline.Size)
 		}
 		if entry.V <= 0 {
-			return nil, errors.Errorf("entry %d: v=%f is out of range (0, inf)",
+			return nil, fmt.Errorf("entry %d: v=%f is out of range (0, inf)",
 				idx, entry.V)
 		}
 		entries = append(entries, sparse.Entry{Index: entry.I, Value: entry.V})
@@ -434,4 +572,105 @@ func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
 	inline.Size = 0
 	inline.Entries = nil
 	return sparse.NewVector(size, entries), nil
+}
+
+func (server *OAPIStrictServerImpl) loadObjectStorageTrustVector(
+	ctx context.Context, ref *openapi.ObjectStorageTrustVector,
+) (*sparse.Vector, error) {
+	u, err := url.Parse(ref.Url)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse object storage URL: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "s3":
+		bucket := u.Host
+		path := strings.TrimPrefix(u.Path, "/")
+		return server.loadS3TrustVector(ctx, bucket, path)
+	case "file":
+		if !server.UseFileURI {
+			return nil, fmt.Errorf("file: URI is disabled in this server")
+		}
+		return server.loadFileTrustVector(u.Path)
+	default:
+		return nil, fmt.Errorf("unknown object storage URL scheme %#v",
+			u.Scheme)
+	}
+}
+
+func (server *OAPIStrictServerImpl) loadS3TrustVector(
+	ctx context.Context, bucket string, key string,
+) (*sparse.Vector, error) {
+	res, err := server.core.loadS3Object(ctx, bucket, key)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load trust vector from S3: %w", err)
+	}
+	defer util.Close(res.Body)
+	r := csv.NewReader(res.Body)
+	return server.loadCsvTrustVector(r)
+
+}
+
+func (server *OAPIStrictServerImpl) loadFileTrustVector(
+	path string,
+) (*sparse.Vector, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer util.Close(f)
+	return server.loadCsvTrustVector(csv.NewReader(f))
+}
+
+func (server *OAPIStrictServerImpl) loadCsvTrustVector(
+	r *csv.Reader,
+) (*sparse.Vector, error) {
+	header, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read CSV header: %w", err)
+	}
+	if !reflect.DeepEqual(header, []string{"i", "v"}) {
+		return nil, fmt.Errorf("invalid CSV header %#v", header)
+	}
+	var entries []sparse.Entry
+	var size = 0
+	for record, err := r.Read(); err == nil; record, err = r.Read() {
+		if len(record) != 2 {
+			return nil, fmt.Errorf("invalid CSV record %#v", record)
+		}
+		i, err := strconv.Atoi(record[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid i=%#v: %w", record[0], err)
+		}
+		v, err := strconv.ParseFloat(record[1], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid v=%#v: %w", record[1], err)
+		}
+		if size < i+1 {
+			size = i + 1
+		}
+		entries = append(entries, sparse.Entry{Index: i, Value: v})
+	}
+	return sparse.NewVector(size, entries), nil
+}
+
+func (server *Core) loadS3Object(
+	ctx context.Context, bucket string, key string,
+) (*s3.GetObjectOutput, error) {
+	client := s3.NewFromConfig(server.awsConfig)
+	region, err := manager.GetBucketRegion(ctx, client, bucket)
+	if err != nil {
+		return nil, fmt.Errorf("GetBucketRegion failed: %w", err)
+	}
+	awsConfig := server.awsConfig.Copy()
+	awsConfig.Region = region
+	client = s3.NewFromConfig(awsConfig)
+	req := s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+	res, err := client.GetObject(ctx, &req)
+	if err != nil {
+		return nil, fmt.Errorf("GetObject failed: %w", err)
+	}
+	return res, nil
 }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: EigenTrust Basic API
   summary: The EigenTrust Basic API implements the Basic EigenTrust algorithm.
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: 'https://api.k3l.io/basic/v1/'
     description: |
@@ -30,71 +30,7 @@ paths:
         $ref: '#/components/requestBodies/ComputeRequestBody'
       responses:
         "200":
-          description: |
-            Successfully computed the EigenTrust scores.
-
-            The response body refers to the EigenTrust vector.
-            This vector can be sorted in descending order of value (`v`)
-            so as to obtain a trust ranking.
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/TrustVectorRef"
-              examples:
-                Simple1:
-                  summary: Simple 3-peer example
-                  description: |
-                    This is the response to the “Simple 3-peer example” request.
-
-                    Peer #2 is the winner with highest trust value, closely
-                    followed by peer #0; #1 is the least trusted.
-                  value:
-                    {
-                      "entries": [
-                        {
-                          "i": 0,
-                          "v": 0.4033293137942772
-                        },
-                        {
-                          "i": 1,
-                          "v": 0.1707491350775377
-                        },
-                        {
-                          "i": 2,
-                          "v": 0.4259215511281855
-                        }
-                      ],
-                      "scheme": "inline",
-                      "size": 3
-                    }
-                Simple2:
-                  summary: Simple 3-peer example with (unnecessarily) fine epsilon
-                  description: |
-                    This is the response to the “Simple 3-peer example
-                    with (unnecessarily) fine epsilon” request above.
-
-                    Note that the trust values are more or less identical to
-                    the previous example, with less than 0.0001% difference,
-                    demonstrating the 1e-10 epsilon was an overkill.
-                  value:
-                    {
-                      "entries": [
-                        {
-                          "i": 0,
-                          "v": 0.40332936981024636
-                        },
-                        {
-                          "i": 1,
-                          "v": 0.17074910819849826
-                        },
-                        {
-                          "i": 2,
-                          "v": 0.425921521991256
-                        }
-                      ],
-                      "scheme": "inline",
-                      "size": 3
-                    }
+          $ref: "#/components/responses/ComputeResponseOK"
         "400":
           $ref: "#/components/responses/InvalidRequest"
   /compute-with-stats:
@@ -139,7 +75,7 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/LocalTrustRef"
+              $ref: "#/components/schemas/TrustMatrixRef"
         required: true
       responses:
         "200":
@@ -169,10 +105,7 @@ paths:
         - $ref: "#/components/parameters/LocalTrustIdParam"
       responses:
         "200":
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/InlineLocalTrust"
+          $ref: "#/components/responses/LocalTrustGetResponseOK"
         "404":
           description: The local trust does not exist.
     head:
@@ -187,41 +120,43 @@ paths:
           description: The local trust exists.
         "404":
           description: The local trust does not exist.
+  /status:
+    get:
+      summary: Get the health check status
+      operationId: getStatus
+      responses:
+        "200":
+          $ref: "#/components/responses/ServerReady"
+        "500":
+          $ref: "#/components/responses/ServerNotReady"
 components:
-  parameters:
-    LocalTrustIdParam:
-      summary: Local trust ID
-      description: |
-        `id` denotes the local trust collection in question.
-      name: id
-      in: path
-      schema:
-        $ref: "#/components/schemas/LocalTrustId"
   schemas:
-    LocalTrustId:
+    TrustCollectionId:
       description: |
-        Denotes a local trust collection.
+        Denotes a trust collection (matrix/vector).
       type: string
       minLength: 1
-    LocalTrustRef:
+    TrustMatrixRef:
       description: |
-        refers to a local trust.
+        Refers to a trust matrix, such as local trust.
       type: object
       allOf:
         - properties:
             scheme:
-              title: Local trust reference scheme.
+              title: Trust reference scheme.
               description: |
-                Local trust reference scheme, akin to URI scheme.
+                Trust reference scheme, akin to URI scheme.
               type: string
               enum:
                 - inline
                 - stored
+                - objectstorage
           required:
             - scheme
         - oneOf:
-            - $ref: "#/components/schemas/InlineLocalTrust"
-            - $ref: "#/components/schemas/StoredLocalTrust"
+            - $ref: "#/components/schemas/InlineTrustMatrix"
+            - $ref: "#/components/schemas/StoredTrustMatrix"
+            - $ref: "#/components/schemas/ObjectStorageTrustMatrix"
       examples:
         - scheme: inline
           size: 3
@@ -242,36 +177,42 @@ components:
           id: "3"
         - scheme: stored
           id: engagement
-    InlineLocalTrust:
+    InlineTrustMatrix:
       description: |
-        Refers to a local trust matrix "inline".
+        Refers to a trust matrix "inline".
 
-        Instead of pointing (referencing) to an externally stored local trust,
-        it carries the contents of the local trust matrix
+        Instead of pointing (referencing) to an externally stored trust matrix,
+        it carries the contents of the trust matrix
         within the reference object itself.
       type: object
       required:
+        - scheme
         - size
         - entries
       properties:
+        scheme:
+          description: |
+            A fixed string `"inline"`.
+          type: string
+          enum: [ "inline" ]
         size:
           description: |
-            Denotes the number of peers in the local trust,
+            Denotes the number of peers in the trust matrix,
             i.e. its square dimension.
           type: integer
           minimum: 1
         entries:
           description: |
-            Contains the non-zero entries in the local trust matrix.
+            Contains the non-zero entries in the trust matrix.
 
             Truster/trustee pairs missing here are assigned zero direct trust,
             i.e. no trust relationship.
           type: array
           items:
-            $ref: "#/components/schemas/InlineLocalTrustEntry"
-    InlineLocalTrustEntry:
+            $ref: "#/components/schemas/InlineTrustMatrixEntry"
+    InlineTrustMatrixEntry:
       description: |
-        Represents an entry in the local trust matrix.
+        Represents an entry in the trust matrix.
 
         Denotes that one peer (`i`) places a direct trust in another peer (`j`)
         by a specific amount (`v`).
@@ -287,7 +228,7 @@ components:
 
             It is a zero-based index,
             and must be less than the size (dimension)
-            of the enclosing local trust matrix.
+            of the enclosing trust matrix.
           type: integer
           minimum: 0
         j:
@@ -296,7 +237,7 @@ components:
 
             It is a zero-based index,
             and must be less than the size (dimension)
-            of the enclosing local trust matrix.
+            of the enclosing trust matrix.
           type: integer
           minimum: 0
         v:
@@ -313,23 +254,66 @@ components:
         - i: 1
           j: 2
           v: 1
-    StoredLocalTrust:
+    StoredTrustMatrix:
       description: |
-        Refers to a local trust stored on the server.
+        Refers to a trust matrix stored on the server.
         
-        Stored local trust is identified with its ID string.
+        Stored trust matrix is identified with its ID string.
       type: object
       required:
+        - scheme
         - id
       properties:
+        scheme:
+          description: |
+            A fixed string `"stored"`.
+          type: string
+          enum: [ "stored" ]
         id:
-          $ref: "#/components/schemas/LocalTrustId"
+          $ref: "#/components/schemas/TrustCollectionId"
+    ObjectStorageTrustMatrix:
+      description: |
+        Refers to a trust matrix in a remote object storage service.
+      type: object
+      required:
+        - scheme
+        - url
+      properties:
+        scheme:
+          description: |
+            A fixed string `"objectstorage"`.
+          type: string
+          enum: [ "objectstorage" ]
+        url:
+          description: |
+            URL of the trust matrix file.
+
+            It must refer to a CSV file, with three columns `i`, `j`, and `v`.
+            Currently the `s3://` URL scheme (AWS S3) is supported.
+          type: string
+      examples:
+        - scheme: objectstorage
+          url: s3://bucket-name/path/to/file.csv
     TrustVectorRef:
       description: |
         Refers to a trust vector.
       type: object
-      oneOf:
-        - $ref: "#/components/schemas/InlineTrustVector"
+      allOf:
+        - properties:
+            scheme:
+              title: Trust vector reference scheme.
+              description: |
+                Trust vector reference scheme, akin to URI scheme.
+              type: string
+              enum:
+                - inline
+                - stored
+                - objectstorage
+          required:
+            - scheme
+        - oneOf:
+            - $ref: "#/components/schemas/InlineTrustVector"
+            - $ref: "#/components/schemas/ObjectStorageTrustVector"
     InlineTrustVector:
       description: |
         Refers to a trust vector "inline".
@@ -374,7 +358,7 @@ components:
           entries: [ ]
     InlineTrustVectorEntry:
       description: |
-        Represents an entry in the local trust matrix.
+        Represents an entry in the trust vector.
 
         Denotes that a trust is placed in a peer (`i`)
         by a specific amount (`v`).
@@ -402,6 +386,29 @@ components:
           v: 1.0
         - i: 2
           v: 0.5
+    ObjectStorageTrustVector:
+      description: |
+        Refers to a trust vector in a remote object storage service.
+      type: object
+      required:
+        - scheme
+        - url
+      properties:
+        scheme:
+          description: |
+            A fixed string `"objectstorage"`.
+          type: string
+          enum: [ "objectstorage" ]
+        url:
+          description: |
+            URL of the trust vector file.
+
+            It must refer to a CSV file, with two columns `i` and `v`.
+            Currently the `s3://` URL scheme (AWS S3) is supported.
+          type: string
+      examples:
+        - scheme: objectstorage
+          url: s3://bucket-name/path/to/file.csv
     FlatTailStats:
       description: Flat-tail algorithm stats and peer ranking.
       type: object
@@ -449,217 +456,143 @@ components:
           items:
             type: integer
             minimum: 0
-  requestBodies:
+    ComputeParams:
+      type: object
+      required:
+        - localTrust
+      properties:
+        localTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+        initialTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        preTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        alpha:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          default: 0.5
+        epsilon:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        flatTail:
+          description: |
+            The length of the flat tail
+            (ranking unchanged from previous iteration)
+            that must be seen before terminating the recursion.
+            0 means a flat tail need not be seen,
+            and the recursion is terminated solely based upon epsilon.
+          type: integer
+          minimum: 0
+        numLeaders:
+          description: |
+            The number of top-ranking peers to consider
+            for the purpose of flat-tail algorithm.  0 means everyone.
+          type: integer
+          minimum: 0
+        maxIterations:
+          description: |
+            The maximum number of iterations after which to stop
+            even if other termination criteria are not met.
+            0 means no limit.
+          type: integer
+          minimum: 0
+        minIterations:
+          description: |
+            The minimum number of iterations to perform
+            even if other termination criteria are met.
+            Defaults to checkFreq, which in turn defaults to 1.
+          type: integer
+          minimum: 1
+        checkFreq:
+          description: |
+            If given (n), exit criteria are checked every n iterations.
+            It can be used in conjunction with minIterations
+            for "modulo n" behavior,
+            e.g. with minIterations=7 and checkFreq=5
+            exit criteria are checked after 7/12/17/... iterations.
+            Default is 1: exit criteria are checked after every iteration.
+          type: integer
+          minimum: 1
+    ComputeRequestParams:
+      type: object
+      required:
+        - localTrust
+      properties:
+        globalTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+          description: |
+            Where to store the compute result.
+            If not given, return inline.
+        effectiveLocalTrust:
+          $ref: "#/components/schemas/TrustMatrixRef"
+          description: |
+            Where to store the effective local trust used for compute.
+            This is the local trust after canonicalization
+            and pre-trust substitution (for peers without outbound trust).
+        effectivePreTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+          description: |
+            Where to store the effective pre-trust used for compute.
+        effectiveInitialTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+          description: |
+            Where to store the effective initial trust used for compute.
     ComputeRequestBody:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ComputeParams"
+        - $ref: "#/components/schemas/ComputeRequestParams"
+    ComputeWithStatsResponseOK:
+      type: object
+      required:
+        - eigenTrust
+        - flatTailStats
+      properties:
+        eigenTrust:
+          $ref: "#/components/schemas/TrustVectorRef"
+        flatTailStats:
+          $ref: "#/components/schemas/FlatTailStats"
+    ServerStatus:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: |
+            The server status message.
+          type: string
+    InvalidRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: |
+            Describes the error in a human-readable message.
+
+            It may be empty.
+          type: string
+  responses:
+    ComputeResponseOK:
       description: |
-        Parameters for a compute request.
-      required: true
+        Successfully computed the EigenTrust scores.
+
+        The response body refers to the EigenTrust vector.
+        This vector can be sorted in descending order of value (`v`)
+        so as to obtain a trust ranking.
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - localTrust
-            properties:
-              localTrust:
-                $ref: "#/components/schemas/LocalTrustRef"
-              initialTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              preTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              alpha:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-                default: 0.5
-              epsilon:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-              flatTail:
-                description: |
-                  The length of the flat tail
-                  (ranking unchanged from previous iteration)
-                  that must be seen before terminating the recursion.
-                  0 means a flat tail need not be seen,
-                  and the recursion is terminated solely based upon epsilon.
-                type: integer
-                minimum: 0
-              numLeaders:
-                description: |
-                  The number of top-ranking peers to consider
-                  for the purpose of flat-tail algorithm.  0 means everyone.
-                type: integer
-                minimum: 0
-              maxIterations:
-                description: |
-                  The maximum number of iterations after which to stop
-                  even if other termination criteria are not met.
-                  0 means no limit.
-                type: integer
-                minimum: 0
+            $ref: "#/components/schemas/TrustVectorRef"
           examples:
             Simple1:
-              summary: Simple 3-peer example
-              description: |
-                This example passes a local trust of 3 peers (#0–#2), where:
-
-                - #0 trusts #1,
-                - #0 also trusts #2 – twice as much as #1,
-                - #1 trusts #2, and
-                - #2 trusts #0, i.e. reciprocates #0's trust.
-
-                #0 and #1 are pre-trusted; #2 is not.
-                #1 is pre-trusted four times more than #0.
-
-                Pre-trust strength (`alpha`) is 0.1.
-
-                Iteration threshold (`epsilon`) is absent;
-                then the server uses a default value
-                based upon the number of peers (3).
-              value:
-                localTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      j: 1
-                      v: 0.25
-                    - i: 0
-                      j: 2
-                      v: 0.75
-                    - i: 1
-                      j: 2
-                      v: 1.0
-                    - i: 2
-                      j: 0
-                      v: 1.0
-                preTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      v: 0.2
-                    - i: 1
-                      v: 0.8
-                alpha: 0.1
+              $ref: "#/components/examples/ComputeResponseSimple1"
             Simple2:
-              summary: Simple 3-peer example with (unnecessarily) fine epsilon
-              description: |
-                This example is the same as the previous example, except:
-
-                - Values are scaled differently;
-                - Iteration threshold value (`epsilon`) is given explicitly.
-
-                That is, the trust levels by the same peer (#0 in this case)
-                do not have to be pre-scaled or canonicalized by the client;
-                only their relative magnitude matters.
-
-                The explicit iteration threshold
-                (`epsilon=1e-10`, or 0.0000000001)
-                is much finer than the size-based default
-                (`1e-6 / 3`, or 0.000003…),
-                so it will take more iterations than the previous example,
-                but will result in more accurate ranking,
-                especially among lower-ranked peers near the tail.
-
-                In this example of only 3 peers though,
-                `epsilon=1e-10` is definitely an overkill:
-                The relative ranking among peers #0–#2 will not change
-                after only a few iterations.
-
-                Developers are encouraged to experiment
-                and tune `epsilon` to their needs,
-                e.g. if only the top few clear winners are needed,
-                a coarser (larger) `epsilon` will likely suffice.
-              value:
-                localTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      j: 1
-                      v: 1.0
-                    - i: 0
-                      j: 2
-                      v: 3.0
-                    - i: 1
-                      j: 2
-                      v: 1.0
-                    - i: 2
-                      j: 0
-                      v: 1.0
-                preTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      v: 1.0
-                    - i: 1
-                      v: 4.0
-                alpha: 0.1
-                epsilon: 1e-10
-            MissingLocalTrust:
-              summary: A 3-peer example with missing local trust by a peer
-              description: |
-                In this example, local trust by #2 is missing/unknown.
-                Per EigenTrust algorithm,
-                it is assumed to be the same as the pre-trust.
-                That is, #2 is assumed to trust #0 and #1,
-                trusting #1 four times as much as #0.
-              value:
-                localTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      j: 1
-                      v: 1.0
-                    - i: 0
-                      j: 2
-                      v: 3.0
-                    - i: 1
-                      j: 2
-                      v: 1.0
-                preTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      v: 1.0
-                    - i: 1
-                      v: 4.0
-                alpha: 0.1
-            MissingLocalTrustAndPreTrust:
-              summary: A 3-peer example with missing local trust and pre-trust
-              description: |
-                In this example, not just #2's local trust but also the
-                pre-trust is missing.
-                Per EigenTrust algorithm,
-                a uniform pre-trust is used if no pre-trust is specified,
-                that is, peers #0–#2 are pre-trusted equally.
-                Then in turn, the missing local trust by #2
-                is assumed to be the same as the pre-trust,
-                i.e. #2 is assumed to trust everyone equally.
-              value:
-                localTrust:
-                  scheme: "inline"
-                  size: 3
-                  entries:
-                    - i: 0
-                      j: 1
-                      v: 1.0
-                    - i: 0
-                      j: 2
-                      v: 3.0
-                    - i: 1
-                      j: 2
-                      v: 1.0
-                alpha: 0.1
-
-  responses:
+              $ref: "#/components/examples/ComputeResponseSimple2"
     ComputeWithStatsResponseOK:
       description: |
         Successfully computed the EigenTrust scores.
@@ -669,34 +602,276 @@ components:
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - eigenTrust
-              - flatTailStats
-            properties:
-              eigenTrust:
-                $ref: "#/components/schemas/TrustVectorRef"
-              flatTailStats:
-                $ref: "#/components/schemas/FlatTailStats"
+            $ref: "#/components/schemas/ComputeWithStatsResponseOK"
+    LocalTrustGetResponseOK:
+      description: The requested local trust contents.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/InlineTrustMatrix"
     InvalidRequest:
       description: |
         Client sent an invalid request.
       content:
         "application/json":
           schema:
-            type: object
-            required:
-              - message
-            properties:
-              message:
-                description: |
-                  Describes the error in a human-readable message.
-
-                  It may be empty.
-                type: string
+            $ref: "#/components/schemas/InvalidRequest"
           examples:
             Example1:
-              description: |
-                A parameter validation error.
-              value:
-                message: "cannot load local trust: unknown local trust ref type"
+              $ref: "#/components/examples/InvalidRequestExample1"
+    ServerReady:
+      description: Server is ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
+    ServerNotReady:
+      description: Server is not ready to take requests.
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ServerStatus"
+  parameters:
+    LocalTrustIdParam:
+      description: |
+        `id` denotes the local trust collection in question.
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/TrustCollectionId"
+  examples:
+    ComputeRequestSimple1:
+      summary: Simple 3-peer example
+      description: |
+        This example passes a local trust of 3 peers (#0–#2), where:
+        
+        - #0 trusts #1,
+        - #0 also trusts #2 – twice as much as #1,
+        - #1 trusts #2, and
+        - #2 trusts #0, i.e. reciprocates #0's trust.
+        
+        #0 and #1 are pre-trusted; #2 is not.
+        #1 is pre-trusted four times more than #0.
+        
+        Pre-trust strength (`alpha`) is 0.1.
+        
+        Iteration threshold (`epsilon`) is absent;
+        then the server uses a default value
+        based upon the number of peers (3).
+      value:
+        localTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              j: 1
+              v: 0.25
+            - i: 0
+              j: 2
+              v: 0.75
+            - i: 1
+              j: 2
+              v: 1.0
+            - i: 2
+              j: 0
+              v: 1.0
+        preTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              v: 0.2
+            - i: 1
+              v: 0.8
+        alpha: 0.1
+    ComputeRequestSimple2:
+      summary: Simple 3-peer example with (unnecessarily) fine epsilon
+      description: |
+        This example is the same as the previous example, except:
+        
+        - Values are scaled differently;
+        - Iteration threshold value (`epsilon`) is given explicitly.
+        
+        That is, the trust levels by the same peer (#0 in this case)
+        do not have to be pre-scaled or canonicalized by the client;
+        only their relative magnitude matters.
+        
+        The explicit iteration threshold
+        (`epsilon=1e-10`, or 0.0000000001)
+        is much finer than the size-based default
+        (`1e-6 / 3`, or 0.000003…),
+        so it will take more iterations than the previous example,
+        but will result in more accurate ranking,
+        especially among lower-ranked peers near the tail.
+        
+        In this example of only 3 peers though,
+        `epsilon=1e-10` is definitely an overkill:
+        The relative ranking among peers #0–#2 will not change
+        after only a few iterations.
+        
+        Developers are encouraged to experiment
+        and tune `epsilon` to their needs,
+        e.g. if only the top few clear winners are needed,
+        a coarser (larger) `epsilon` will likely suffice.
+      value:
+        localTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              j: 1
+              v: 1.0
+            - i: 0
+              j: 2
+              v: 3.0
+            - i: 1
+              j: 2
+              v: 1.0
+            - i: 2
+              j: 0
+              v: 1.0
+        preTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              v: 1.0
+            - i: 1
+              v: 4.0
+        alpha: 0.1
+        epsilon: 1e-10
+    ComputeRequestMissingLocalTrust:
+      summary: A 3-peer example with missing local trust by a peer
+      description: |
+        In this example, local trust by #2 is missing/unknown.
+        Per EigenTrust algorithm,
+        it is assumed to be the same as the pre-trust.
+        That is, #2 is assumed to trust #0 and #1,
+        trusting #1 four times as much as #0.
+      value:
+        localTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              j: 1
+              v: 1.0
+            - i: 0
+              j: 2
+              v: 3.0
+            - i: 1
+              j: 2
+              v: 1.0
+        preTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              v: 1.0
+            - i: 1
+              v: 4.0
+        alpha: 0.1
+    ComputeRequestMissingLocalTrustAndPreTrust:
+      summary: A 3-peer example with missing local trust and pre-trust
+      description: |
+        In this example, not just #2's local trust but also the
+        pre-trust is missing.
+        Per EigenTrust algorithm,
+        a uniform pre-trust is used if no pre-trust is specified,
+        that is, peers #0–#2 are pre-trusted equally.
+        Then in turn, the missing local trust by #2
+        is assumed to be the same as the pre-trust,
+        i.e. #2 is assumed to trust everyone equally.
+      value:
+        localTrust:
+          scheme: "inline"
+          size: 3
+          entries:
+            - i: 0
+              j: 1
+              v: 1.0
+            - i: 0
+              j: 2
+              v: 3.0
+            - i: 1
+              j: 2
+              v: 1.0
+        alpha: 0.1
+    ComputeResponseSimple1:
+      summary: Simple 3-peer example
+      description: |
+        This is the response to the “Simple 3-peer example” request.
+        
+        Peer #2 is the winner with highest trust value, closely
+        followed by peer #0; #1 is the least trusted.
+      value:
+        {
+          "entries": [
+            {
+              "i": 0,
+              "v": 0.4033293137942772
+            },
+            {
+              "i": 1,
+              "v": 0.1707491350775377
+            },
+            {
+              "i": 2,
+              "v": 0.4259215511281855
+            }
+          ],
+          "scheme": "inline",
+          "size": 3
+        }
+    ComputeResponseSimple2:
+      summary: Simple 3-peer example with (unnecessarily) fine epsilon
+      description: |
+        This is the response to the “Simple 3-peer example
+        with (unnecessarily) fine epsilon” request above.
+        
+        Note that the trust values are more or less identical to
+        the previous example, with less than 0.0001% difference,
+        demonstrating the 1e-10 epsilon was an overkill.
+      value:
+        {
+          "entries": [
+            {
+              "i": 0,
+              "v": 0.40332936981024636
+            },
+            {
+              "i": 1,
+              "v": 0.17074910819849826
+            },
+            {
+              "i": 2,
+              "v": 0.425921521991256
+            }
+          ],
+          "scheme": "inline",
+          "size": 3
+        }
+    InvalidRequestExample1:
+      description: |
+        A parameter validation error.
+      value:
+        message: "cannot load local trust: unknown local trust ref type"
+  requestBodies:
+    ComputeRequestBody:
+      description: |
+        Parameters for a compute request.
+      required: true
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ComputeRequestBody"
+          examples:
+            Simple1:
+              $ref: "#/components/examples/ComputeRequestSimple1"
+            Simple2:
+              $ref: "#/components/examples/ComputeRequestSimple2"
+            MissingLocalTrust:
+              $ref: "#/components/examples/ComputeRequestMissingLocalTrust"
+            MissingLocalTrustAndPreTrust:
+              $ref: "#/components/examples/ComputeRequestMissingLocalTrustAndPreTrust"

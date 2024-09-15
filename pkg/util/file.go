@@ -29,3 +29,7 @@ func OpenOutputFile(filename string) (io.WriteCloser, error) {
 		return os.Create(filename)
 	}
 }
+
+// Close tries to close a closer, ignoring any error.
+// For use with defer.
+func Close(c io.Closer) { _ = c.Close() }

@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +30,7 @@ as well as a client to interact with the server.`,
 				w, err := os.OpenFile(logFile,
 					os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o0777)
 				if err != nil {
-					return errors.Wrap(err, "cannot open log file")
+					return fmt.Errorf("cannot open log file: %w", err)
 				}
 				logWriter = w
 			}
@@ -41,6 +41,8 @@ as well as a client to interact with the server.`,
 	cfgFile string
 	logFile string
 	logger  zerolog.Logger
+
+	useFileURI bool
 )
 
 func Execute() {
