@@ -53,7 +53,7 @@ func ExtractDistrust(
 	if err != nil {
 		return nil, err
 	}
-	distrust := sparse.NewCSRMatrix(n, n, nil)
+	distrust := sparse.NewCSRMatrix(n, n, nil, false)
 	for truster := 0; truster < n; truster++ {
 		trustRow := localTrust.Entries[truster]
 		distrustRow := distrust.Entries[truster]
@@ -131,5 +131,5 @@ func ReadLocalTrustFromCsv(
 		maxIndex = maxTo
 	}
 	dim := maxIndex + 1
-	return sparse.NewCSRMatrix(dim, dim, entries), nil
+	return sparse.NewCSRMatrix(dim, dim, entries, false), nil
 }

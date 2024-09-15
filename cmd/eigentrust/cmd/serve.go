@@ -10,7 +10,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
-	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/api/openapi"
+	oapiserver "k3l.io/go-eigentrust/pkg/basic/server/oapi"
 )
 
 var (
@@ -35,7 +36,7 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server, err := basic.NewStrictServerImpl(ctx)
+			server, err := oapiserver.NewStrictServerImpl(ctx)
 			if err != nil {
 				logger.Err(err).Msg("cannot create server implementation")
 				return
@@ -44,8 +45,8 @@ var (
 				useFileURI = true
 			}
 			server.UseFileURI = useFileURI
-			basic.RegisterHandlersWithBaseURL(e,
-				basic.NewStrictHandler(server, nil), "/basic/v1")
+			openapi.RegisterHandlersWithBaseURL(e,
+				openapi.NewStrictHandler(server, nil), "/basic/v1")
 			if listenAddress == "" {
 				addr := ""
 				if localhost {
