@@ -4,18 +4,18 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
 	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/peer"
+	"k3l.io/go-eigentrust/pkg/sparse"
+	spopt "k3l.io/go-eigentrust/pkg/sparse/option"
 	"k3l.io/go-eigentrust/pkg/util"
 )
 
@@ -42,12 +42,24 @@ var (
 	checkFreq             int
 	csvHasHeader          bool
 	rawPeerIds            bool
-	peerIds               []string
-	peerIndices           map[string]int
+	peerMap               *peer.Map
 	printRequest          bool
 )
 
-func trustMatrixURIToRef(uri string, ref *openapi.TrustMatrixRef) error {
+func pathIntoFileRef(path string, ref *openapi.TrustRef) error {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	err = ref.FromObjectStorageTrustRef(openapi.ObjectStorageTrustRef{Url: "file://" + path})
+	if err != nil {
+		return err
+	}
+	ref.Scheme = openapi.Objectstorage
+	return nil
+}
+
+func trustMatrixURIToRef(uri string, ref *openapi.TrustRef) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return err
@@ -59,16 +71,7 @@ func trustMatrixURIToRef(uri string, ref *openapi.TrustMatrixRef) error {
 			path = parsed.Opaque
 		}
 		if useFileURI {
-			if path, err := filepath.Abs(path); err != nil {
-				return err
-			} else if err := ref.FromObjectStorageTrustMatrix(openapi.ObjectStorageTrustMatrix{
-				Scheme: openapi.ObjectStorageTrustMatrixSchemeObjectstorage,
-				Url:    "file://" + path,
-			}); err != nil {
-				return err
-			}
-			ref.Scheme = "objectstorage" // XXX
-			return nil
+			return pathIntoFileRef(path, ref)
 		}
 		return loadInlineTrustMatrix(path, ref)
 	default:
@@ -76,19 +79,19 @@ func trustMatrixURIToRef(uri string, ref *openapi.TrustMatrixRef) error {
 	}
 }
 
-func loadInlineTrustMatrix(filename string, ref *openapi.TrustMatrixRef) error {
+func loadInlineTrustMatrix(filename string, ref *openapi.TrustRef) error {
 	logger.Trace().Str("filename", filename).Msg("loading inline local trust")
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".csv":
-		return loadInlineTrustMatrixCsv(filename, ref)
+		return loadInlineTrustMatrixCSV(filename, ref)
 	default:
 		return fmt.Errorf("invalid local trust file type %#v", ext)
 	}
 }
 
-func loadInlineTrustMatrixCsv(
-	filename string, ref *openapi.TrustMatrixRef,
+func loadInlineTrustMatrixCSV(
+	filename string, ref *openapi.TrustRef,
 ) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -96,78 +99,28 @@ func loadInlineTrustMatrixCsv(
 	}
 	defer util.Close(f)
 	reader := csv.NewReader(f)
-	inputErrorf := func(field int, format string, v ...interface{}) error {
-		line, column := reader.FieldPos(0)
-		return fmt.Errorf("%s:%d:%d: %s",
-			filename, line, column, fmt.Sprintf(format, v...))
+	ctx := context.TODO()
+	peerMapOption := spopt.LiteralIndices
+	if peerMap != nil {
+		peerMapOption = spopt.IndicesInto(peerMap)
 	}
-	inputWrapf := func(
-		err error, field int, format string, v ...interface{},
-	) error {
-		line, column := reader.FieldPos(0)
-		return fmt.Errorf("%s:%d:%d: %s: %s",
-			filename, line, column, fmt.Sprintf(format, v...), err)
+	m, err := sparse.NewCSRMatrixFromCSV(ctx, reader, peerMapOption)
+	if err != nil {
+		return err
 	}
-	inline := openapi.InlineTrustMatrix{Scheme: openapi.InlineTrustMatrixSchemeInline}
-	ignoreFirst := csvHasHeader
-	fields, err := reader.Read()
-	for ; err == nil; fields, err = reader.Read() {
-		if len(fields) < 2 {
-			return inputErrorf(0, "too few (%d) fields", len(fields))
-		}
-		if len(fields) > 3 {
-			return inputErrorf(0, "too many (%d) fields", len(fields))
-		}
-		if ignoreFirst {
-			ignoreFirst = false
-			continue
-		}
-		var (
-			from, to int
-			value    float64
-		)
-		from, err = getPeerIndex(fields[0])
-		switch {
-		case err != nil:
-			return inputWrapf(err, 0, "invalid from=%#v", fields[0])
-		case from < 0:
-			return inputErrorf(0, "negative from=%#v", from)
-		}
-		to, err = getPeerIndex(fields[1])
-		switch {
-		case err != nil:
-			return inputWrapf(err, 1, "invalid to=%#v", fields[1])
-		case to < 0:
-			return inputErrorf(1, "negative to=%#v", to)
-		}
-		value, err = strconv.ParseFloat(fields[2], 64)
-		switch {
-		case err != nil:
-			return inputWrapf(err, 2, "invalid trust value=%#v", fields[2])
-		}
-		inline.Entries = append(inline.Entries,
-			openapi.InlineTrustMatrixEntry{I: from, J: to, V: value})
-		if inline.Size <= from {
-			inline.Size = from + 1
-		}
-		if inline.Size <= to {
-			inline.Size = to + 1
-		}
+	inline, err := openapi.InlineFromMatrix(ctx, m)
+	if err != nil {
+		return err
 	}
-	if inline.Size == 0 {
-		return errors.New("empty trust matrix")
-	}
-	if err != io.EOF {
-		return fmt.Errorf("cannot read trust matrix CSV %#v: %w", filename, err)
-	}
-	if err = ref.FromInlineTrustMatrix(inline); err != nil {
+	err = ref.FromInlineTrustRef(*inline)
+	if err != nil {
 		return fmt.Errorf("cannot wrap inline trust matrix: %w", err)
 	}
-	ref.Scheme = openapi.TrustMatrixRefSchemeInline
+	ref.Scheme = openapi.Inline
 	return nil
 }
 
-func trustVectorURIToRef(uri string, ref *openapi.TrustVectorRef) error {
+func trustVectorURIToRef(uri string, ref *openapi.TrustRef) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return err
@@ -179,16 +132,7 @@ func trustVectorURIToRef(uri string, ref *openapi.TrustVectorRef) error {
 			path = parsed.Opaque
 		}
 		if useFileURI {
-			if path, err := filepath.Abs(path); err != nil {
-				return err
-			} else if err := ref.FromObjectStorageTrustVector(openapi.ObjectStorageTrustVector{
-				Scheme: openapi.ObjectStorageTrustVectorSchemeObjectstorage,
-				Url:    "file://" + path,
-			}); err != nil {
-				return err
-			}
-			ref.Scheme = "objectstorage" // XXX
-			return nil
+			return pathIntoFileRef(path, ref)
 		}
 		return loadInlineTrustVector(path, ref)
 	default:
@@ -196,19 +140,19 @@ func trustVectorURIToRef(uri string, ref *openapi.TrustVectorRef) error {
 	}
 }
 
-func loadInlineTrustVector(filename string, ref *openapi.TrustVectorRef) error {
+func loadInlineTrustVector(filename string, ref *openapi.TrustRef) error {
 	logger.Trace().Str("filename", filename).Msg("loading inline trust vector")
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".csv":
-		return loadInlineTrustVectorCsv(filename, ref)
+		return loadInlineTrustVectorFromCSV(filename, ref)
 	default:
 		return fmt.Errorf("invalid trust vector file type %#v", ext)
 	}
 }
 
-func loadInlineTrustVectorCsv(
-	filename string, ref *openapi.TrustVectorRef,
+func loadInlineTrustVectorFromCSV(
+	filename string, ref *openapi.TrustRef,
 ) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -216,98 +160,53 @@ func loadInlineTrustVectorCsv(
 	}
 	defer util.Close(f)
 	reader := csv.NewReader(f)
-	inputErrorf := func(field int, format string, v ...interface{}) error {
-		line, column := reader.FieldPos(0)
-		return fmt.Errorf("%s:%d:%d: %s",
-			filename, line, column, fmt.Sprintf(format, v...))
+	ctx := context.TODO()
+	peerMapOption := spopt.LiteralIndices
+	if peerMap != nil {
+		peerMapOption = spopt.IndicesInto(peerMap)
 	}
-	inputWrapf := func(
-		err error, field int, format string, v ...interface{},
-	) error {
-		line, column := reader.FieldPos(0)
-		return fmt.Errorf("%s:%d:%d: %s: %w", filename, line, column,
-			fmt.Sprintf(format, v...), err)
+	v, err := sparse.NewVectorFromCSV(ctx, reader, peerMapOption)
+	if err != nil {
+		return err
 	}
-	inline := openapi.InlineTrustVector{
-		Scheme:  openapi.InlineTrustVectorSchemeInline,
-		Entries: nil,
-		Size:    0,
+	inline, err := openapi.InlineFromVector(ctx, v)
+	if err != nil {
+		return err
 	}
-	ignoreFirst := csvHasHeader
-	fields, err := reader.Read()
-	for ; err == nil; fields, err = reader.Read() {
-		if len(fields) < 1 {
-			return inputErrorf(0, "too few (%d) fields", len(fields))
-		}
-		if len(fields) > 2 {
-			return inputErrorf(0, "too many (%d) fields", len(fields))
-		}
-		if ignoreFirst {
-			ignoreFirst = false
-			continue
-		}
-		var (
-			from  int
-			value float64
-		)
-		from, err = getPeerIndex(fields[0])
-		switch {
-		case err != nil:
-			return inputWrapf(err, 0, "invalid from=%#v", fields[0])
-		case from < 0:
-			return inputErrorf(0, "negative from=%#v", from)
-		}
-		value, err = strconv.ParseFloat(fields[1], 64)
-		switch {
-		case err != nil:
-			return inputWrapf(err, 1, "invalid trust value=%#v", fields[1])
-		case value < 0:
-			return inputErrorf(1, "negative value=%#v", value)
-		}
-		inline.Entries = append(inline.Entries,
-			openapi.InlineTrustVectorEntry{I: from, V: value})
-		if inline.Size <= from {
-			inline.Size = from + 1
-		}
-	}
-	if inline.Size == 0 {
-		return errors.New("empty trust vector")
-	}
-	if err != io.EOF {
-		return fmt.Errorf("cannot read trust vector CSV %#v: %w", filename, err)
-	}
-	if err = ref.FromInlineTrustVector(inline); err != nil {
+	if err = ref.FromInlineTrustRef(*inline); err != nil {
 		return fmt.Errorf("cannot wrap inline trust vector: %w", err)
 	}
 	ref.Scheme = openapi.Inline
 	return nil
 }
 
-func writeOutput(
-	entries []openapi.InlineTrustVectorEntry, filename string,
+func writeInlineTrustVectorIntoCSV(
+	ctx context.Context, itv *openapi.InlineTrustRef, filename string,
 ) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	v, err := openapi.VectorFromInline(ctx, itv, spopt.IncludeZero,
+		spopt.AllowNegative)
+	if err != nil {
+		return fmt.Errorf("cannot load inline trust vector: %w", err)
+	}
 	file, err := util.OpenOutputFile(filename)
 	if err != nil {
 		return fmt.Errorf("cannot open output file: %w", err)
 	}
 	defer util.Close(file)
-	csvWriter := csv.NewWriter(file)
-	for _, entry := range entries {
-		var peerId string
-		peerId, err = getPeerId(entry.I)
-		if err != nil {
-			return err
-		}
-		if err = csvWriter.Write([]string{
-			peerId,
-			strconv.FormatFloat(entry.V, 'f', -1, 64),
-		}); err != nil {
-			return err
-		}
+	w := csv.NewWriter(file)
+	indexOption := spopt.LiteralIndices
+	if peerMap != nil {
+		indexOption = spopt.IndicesIn(peerMap)
 	}
-	csvWriter.Flush()
-	if csvWriter.Error() != nil {
-		return fmt.Errorf("cannot flush output file: %w", err)
+	err = v.WriteIntoCSV(ctx, w, spopt.IncludeZero, indexOption)
+	if err != nil {
+		return fmt.Errorf("cannot write into CSV: %w", err)
+	}
+	w.Flush()
+	if err = w.Error(); err != nil {
+		return fmt.Errorf("cannot flush CSV writes: %w", err)
 	}
 	return nil
 }
@@ -332,12 +231,16 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	if useFileURI {
 		rawPeerIds = true
 	}
+	if !rawPeerIds {
+		peerMap = peer.NewMap()
+	}
 	client, err := openapi.NewClientWithResponses(endpoint)
 	if err != nil {
 		logger.Err(err).Msg("cannot create an API client")
 		return
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	epsilonP := &epsilon
 	if epsilon == 0 {
 		epsilonP = nil
@@ -354,7 +257,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		return
 	}
 	if preTrustURI != "" {
-		var preTrustRef openapi.TrustVectorRef
+		var preTrustRef openapi.TrustRef
 		err = trustVectorURIToRef(preTrustURI, &preTrustRef)
 		if err != nil {
 			logger.Err(err).Msg("cannot parse/load pre-trust reference")
@@ -363,7 +266,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		requestBody.PreTrust = &preTrustRef
 	}
 	if initialTrustURI != "" {
-		var initialTrustRef openapi.TrustVectorRef
+		var initialTrustRef openapi.TrustRef
 		err = trustVectorURIToRef(initialTrustURI, &initialTrustRef)
 		if err != nil {
 			logger.Err(err).Msg("cannot parse/load initial trust reference")
@@ -387,7 +290,7 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		req := struct {
 			Body    *openapi.ComputeWithStatsJSONRequestBody `json:"body"`
 			PeerIds []string                                 `json:"peerIds"`
-		}{&requestBody, peerIds}
+		}{&requestBody, peerMap.Ids()}
 		err = json.NewEncoder(os.Stdout).Encode(req)
 		if err != nil {
 			logger.Err(err).Msg("cannot encode/print the request body")
@@ -403,11 +306,11 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 	case 200:
 		if resp.JSON200 == nil {
 			logger.Error().Msg("cannot recover HTTP 200 response")
-		} else if inlineEigenTrust, err := resp.JSON200.EigenTrust.AsInlineTrustVector(); err != nil {
+		} else if inlineEigenTrust, err := resp.JSON200.EigenTrust.AsInlineTrustRef(); err != nil {
 			logger.Error().Msg("cannot parse response")
 		} else {
-			if err = writeOutput(
-				inlineEigenTrust.Entries, outputFilename,
+			if err = writeInlineTrustVectorIntoCSV(
+				ctx, &inlineEigenTrust, outputFilename,
 			); err != nil {
 				logger.Err(err).Msg("cannot write output file")
 			}
@@ -426,31 +329,6 @@ func runBasicCompute( /*cmd*/ *cobra.Command /*args*/, []string) {
 		logger.Error().Str("status", resp.HTTPResponse.Status).
 			Msg("server returned unknown status code")
 	}
-}
-
-func getPeerIndex(peerId string) (peerIndex int, err error) {
-	if rawPeerIds {
-		i64, e := strconv.ParseInt(peerId, 0, 0)
-		peerIndex, err = int(i64), e
-	} else if existing, ok := peerIndices[peerId]; ok {
-		peerIndex = existing
-	} else {
-		peerIndex = len(peerIds)
-		peerIds = append(peerIds, peerId)
-		peerIndices[peerId] = peerIndex
-	}
-	return
-}
-
-func getPeerId(peerIndex int) (peerId string, err error) {
-	if rawPeerIds {
-		peerId = strconv.FormatInt(int64(peerIndex), 10)
-	} else if peerIndex < len(peerIds) {
-		peerId = peerIds[peerIndex]
-	} else {
-		err = fmt.Errorf("unknown peer index %d", peerIndex)
-	}
-	return
 }
 
 func init() {
@@ -505,5 +383,4 @@ for flat-tail algorithm and stats.
 	basicComputeCmd.Flags().BoolVarP(&useFileURI, "use-file-uri", "F", false,
 		`Use objectstorage scheme with file:// URI for local file;
 implies --raw-peer-ids (default: false)`)
-	peerIndices = make(map[string]int)
 }

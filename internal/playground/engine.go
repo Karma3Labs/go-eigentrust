@@ -10,7 +10,9 @@ import (
 	"strconv"
 
 	"k3l.io/go-eigentrust/pkg/basic"
+	"k3l.io/go-eigentrust/pkg/peer"
 	"k3l.io/go-eigentrust/pkg/sparse"
+	spopt "k3l.io/go-eigentrust/pkg/sparse/option"
 	"k3l.io/go-eigentrust/pkg/util"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +51,7 @@ func index(gc *gin.Context) error {
 }
 
 func calculate(gc *gin.Context) error {
+	ctx := gc.Request.Context()
 	var hasPeerNames bool
 	peerNamesFile, err := gc.FormFile("peerNamesFile")
 	switch {
@@ -76,21 +79,22 @@ func calculate(gc *gin.Context) error {
 			hunchPercent)
 	}
 	var (
-		peerNames   []string
-		peerIndices map[string]int
-		localTrust  *sparse.Matrix
-		preTrust    *sparse.Vector
+		localTrust   *sparse.Matrix
+		preTrust     *sparse.Vector
+		peerIndexOpt = spopt.LiteralIndices
 	)
+	var peerMap *peer.Map
 	if hasPeerNames {
 		f, err := peerNamesFile.Open()
 		if err != nil {
 			return fmt.Errorf("cannot open peer names file: %w", err)
 		}
 		defer util.Close(f)
-		peerNames, peerIndices, err = basic.ReadPeerNamesFromCsv(csv.NewReader(f))
+		peerMap, err = peer.MapWithIdReader(f)
 		if err != nil {
 			return fmt.Errorf("cannot read peer names file: %w", err)
 		}
+		peerIndexOpt = spopt.IndicesIn(peerMap)
 	}
 	{
 		f, err := localTrustFile.Open()
@@ -98,8 +102,8 @@ func calculate(gc *gin.Context) error {
 			return fmt.Errorf("cannot open local trust file: %w", err)
 		}
 		defer util.Close(f)
-		localTrust, err = basic.ReadLocalTrustFromCsv(csv.NewReader(f),
-			peerIndices)
+		localTrust, err = sparse.NewCSRMatrixFromCSV(ctx, csv.NewReader(f),
+			peerIndexOpt)
 		if err != nil {
 			return fmt.Errorf("cannot read local trust file: %w", err)
 		}
@@ -110,8 +114,8 @@ func calculate(gc *gin.Context) error {
 			return fmt.Errorf("cannot open personal trust file: %w", err)
 		}
 		defer util.Close(f)
-		preTrust, err = basic.ReadTrustVectorFromCsv(csv.NewReader(f),
-			peerIndices)
+		preTrust, err = sparse.NewVectorFromCSV(ctx, csv.NewReader(f),
+			peerIndexOpt)
 		if err != nil {
 			return fmt.Errorf("cannot read personal trust file: %w", err)
 		}
@@ -122,7 +126,7 @@ func calculate(gc *gin.Context) error {
 	}
 	if hasPeerNames {
 		// peer name files are the authoritative source of dimension
-		n := len(peerNames)
+		n := peerMap.Len()
 		switch {
 		case ltDim < n:
 			localTrust.SetDim(n, n)
@@ -168,7 +172,7 @@ func calculate(gc *gin.Context) error {
 	if err != nil {
 		return fmt.Errorf("cannot canonicalize discounts: %w", err)
 	}
-	trustScores, err := basic.Compute(gc.Request.Context(),
+	trustScores, err := basic.Compute(ctx,
 		localTrust, preTrust, float64(hunchPercent)/100.0, 1e-15)
 	if err != nil {
 		return fmt.Errorf("cannot compute EigenTrust scores: %w", err)
@@ -179,11 +183,12 @@ func calculate(gc *gin.Context) error {
 	}
 
 	getPeerName := func(i int) string {
-		if hasPeerNames {
-			return peerNames[i]
-		} else {
-			return fmt.Sprintf("Peer %d", i)
+		if peerMap != nil {
+			if name, ok := peerMap.Id(i); ok {
+				return name
+			}
 		}
+		return fmt.Sprintf("Peer %d", i)
 	}
 
 	var entries []Entry

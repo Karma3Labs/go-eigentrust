@@ -22,43 +22,11 @@ import (
 	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
 )
 
-// Defines values for InlineTrustMatrixScheme.
+// Defines values for TrustRefScheme.
 const (
-	InlineTrustMatrixSchemeInline InlineTrustMatrixScheme = "inline"
-)
-
-// Defines values for InlineTrustVectorScheme.
-const (
-	InlineTrustVectorSchemeInline InlineTrustVectorScheme = "inline"
-)
-
-// Defines values for ObjectStorageTrustMatrixScheme.
-const (
-	ObjectStorageTrustMatrixSchemeObjectstorage ObjectStorageTrustMatrixScheme = "objectstorage"
-)
-
-// Defines values for ObjectStorageTrustVectorScheme.
-const (
-	ObjectStorageTrustVectorSchemeObjectstorage ObjectStorageTrustVectorScheme = "objectstorage"
-)
-
-// Defines values for StoredTrustMatrixScheme.
-const (
-	StoredTrustMatrixSchemeStored StoredTrustMatrixScheme = "stored"
-)
-
-// Defines values for TrustMatrixRefScheme.
-const (
-	TrustMatrixRefSchemeInline        TrustMatrixRefScheme = "inline"
-	TrustMatrixRefSchemeObjectstorage TrustMatrixRefScheme = "objectstorage"
-	TrustMatrixRefSchemeStored        TrustMatrixRefScheme = "stored"
-)
-
-// Defines values for TrustVectorRefScheme.
-const (
-	Inline        TrustVectorRefScheme = "inline"
-	Objectstorage TrustVectorRefScheme = "objectstorage"
-	Stored        TrustVectorRefScheme = "stored"
+	Inline        TrustRefScheme = "inline"
+	Objectstorage TrustRefScheme = "objectstorage"
+	Stored        TrustRefScheme = "stored"
 )
 
 // ComputeParams defines model for ComputeParams.
@@ -81,11 +49,39 @@ type ComputeParams struct {
 	// and the recursion is terminated solely based upon epsilon.
 	FlatTail *int `json:"flatTail,omitempty"`
 
-	// InitialTrust Refers to a trust vector.
-	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
+	// InitialTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	InitialTrust *TrustRef `json:"initialTrust,omitempty"`
 
-	// LocalTrust Refers to a trust matrix, such as local trust.
-	LocalTrust TrustMatrixRef `json:"localTrust"`
+	// LocalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	LocalTrust TrustRef `json:"localTrust"`
 
 	// MaxIterations The maximum number of iterations after which to stop
 	// even if other termination criteria are not met.
@@ -101,8 +97,22 @@ type ComputeParams struct {
 	// for the purpose of flat-tail algorithm.  0 means everyone.
 	NumLeaders *int `json:"numLeaders,omitempty"`
 
-	// PreTrust Refers to a trust vector.
-	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
+	// PreTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	PreTrust *TrustRef `json:"preTrust,omitempty"`
 }
 
 // ComputeRequestBody defines model for ComputeRequestBody.
@@ -117,15 +127,57 @@ type ComputeRequestBody struct {
 	// Default is 1: exit criteria are checked after every iteration.
 	CheckFreq *int `json:"checkFreq,omitempty"`
 
-	// EffectiveInitialTrust Refers to a trust vector.
-	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
+	// EffectiveInitialTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectiveInitialTrust *TrustRef `json:"effectiveInitialTrust,omitempty"`
 
-	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
-	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
+	// EffectiveLocalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectiveLocalTrust *TrustRef `json:"effectiveLocalTrust,omitempty"`
 
-	// EffectivePreTrust Refers to a trust vector.
-	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
-	Epsilon           *float64        `json:"epsilon,omitempty"`
+	// EffectivePreTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectivePreTrust *TrustRef `json:"effectivePreTrust,omitempty"`
+	Epsilon           *float64  `json:"epsilon,omitempty"`
 
 	// FlatTail The length of the flat tail
 	// (ranking unchanged from previous iteration)
@@ -134,14 +186,56 @@ type ComputeRequestBody struct {
 	// and the recursion is terminated solely based upon epsilon.
 	FlatTail *int `json:"flatTail,omitempty"`
 
-	// GlobalTrust Refers to a trust matrix, such as local trust.
-	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
+	// GlobalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	GlobalTrust *TrustRef `json:"globalTrust,omitempty"`
 
-	// InitialTrust Refers to a trust vector.
-	InitialTrust *TrustVectorRef `json:"initialTrust,omitempty"`
+	// InitialTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	InitialTrust *TrustRef `json:"initialTrust,omitempty"`
 
-	// LocalTrust Refers to a trust matrix, such as local trust.
-	LocalTrust TrustMatrixRef `json:"localTrust"`
+	// LocalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	LocalTrust TrustRef `json:"localTrust"`
 
 	// MaxIterations The maximum number of iterations after which to stop
 	// even if other termination criteria are not met.
@@ -157,29 +251,113 @@ type ComputeRequestBody struct {
 	// for the purpose of flat-tail algorithm.  0 means everyone.
 	NumLeaders *int `json:"numLeaders,omitempty"`
 
-	// PreTrust Refers to a trust vector.
-	PreTrust *TrustVectorRef `json:"preTrust,omitempty"`
+	// PreTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	PreTrust *TrustRef `json:"preTrust,omitempty"`
 }
 
 // ComputeRequestParams defines model for ComputeRequestParams.
 type ComputeRequestParams struct {
-	// EffectiveInitialTrust Refers to a trust vector.
-	EffectiveInitialTrust *TrustVectorRef `json:"effectiveInitialTrust,omitempty"`
+	// EffectiveInitialTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectiveInitialTrust *TrustRef `json:"effectiveInitialTrust,omitempty"`
 
-	// EffectiveLocalTrust Refers to a trust matrix, such as local trust.
-	EffectiveLocalTrust *TrustMatrixRef `json:"effectiveLocalTrust,omitempty"`
+	// EffectiveLocalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectiveLocalTrust *TrustRef `json:"effectiveLocalTrust,omitempty"`
 
-	// EffectivePreTrust Refers to a trust vector.
-	EffectivePreTrust *TrustVectorRef `json:"effectivePreTrust,omitempty"`
+	// EffectivePreTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EffectivePreTrust *TrustRef `json:"effectivePreTrust,omitempty"`
 
-	// GlobalTrust Refers to a trust matrix, such as local trust.
-	GlobalTrust *TrustMatrixRef `json:"globalTrust,omitempty"`
+	// GlobalTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	GlobalTrust *TrustRef `json:"globalTrust,omitempty"`
 }
 
 // ComputeWithStatsResponseOK defines model for ComputeWithStatsResponseOK.
 type ComputeWithStatsResponseOK struct {
-	// EigenTrust Refers to a trust vector.
-	EigenTrust TrustVectorRef `json:"eigenTrust"`
+	// EigenTrust A trust collection (matrix/vector).
+	//
+	// Individual entry values in the collection represent trust levels;
+	// the index/-ices – that is, the coordinate/-s – of an entry
+	// indicate the peer/-s to which the trust level (value) is bound.
+	//
+	// The actual nature of this binding between peer/-s and the trust level
+	// is up to the context.
+	// For example, in a global trust (vector) the entry index denotes
+	// the peer to which the trust value is assigned,
+	// (the network trusts this peer by the trust level amount;
+	// the peer is the "trustee"),
+	// while in a column vector of a local trust matrix the entry index denotes
+	// the peer from which the inbound trust is originating
+	// (the peer is the "truster").
+	EigenTrust TrustRef `json:"eigenTrust"`
 
 	// FlatTailStats Flat-tail algorithm stats and peer ranking.
 	FlatTailStats FlatTailStats `json:"flatTailStats"`
@@ -215,87 +393,27 @@ type FlatTailStats struct {
 	Threshold int `json:"threshold"`
 }
 
-// InlineTrustMatrix Refers to a trust matrix "inline".
+// InlineTrustEntry Represents an entry in the trust collection.  Consists of the entry's
+// value (`v`) and the index/indices (position) in the collection.
+type InlineTrustEntry struct {
+	// V Represents the amount of trust bound to the peer/-s
+	// indicated by the entry's index/-ices.
+	V     float64 `json:"v"`
+	union json.RawMessage
+}
+
+// InlineTrustRef An inline "reference" to a trust collection.
 //
-// Instead of pointing (referencing) to an externally stored trust matrix,
-// it carries the contents of the trust matrix
+// Instead of pointing (referencing) to an externally stored collection,
+// it carries the contents (individual sparse entries) of the collection
 // within the reference object itself.
-type InlineTrustMatrix struct {
-	// Entries Contains the non-zero entries in the trust matrix.
-	//
-	// Truster/trustee pairs missing here are assigned zero direct trust,
-	// i.e. no trust relationship.
-	Entries []InlineTrustMatrixEntry `json:"entries"`
+type InlineTrustRef struct {
+	// Entries Contains the non-zero entries in the trust collection.
+	Entries []InlineTrustEntry `json:"entries"`
 
-	// Scheme A fixed string `"inline"`.
-	Scheme InlineTrustMatrixScheme `json:"scheme"`
-
-	// Size Denotes the number of peers in the trust matrix,
-	// i.e. its square dimension.
+	// Size Denotes the number of peers in the trust collection,
+	// i.e. its dimension.
 	Size int `json:"size"`
-}
-
-// InlineTrustMatrixScheme A fixed string `"inline"`.
-type InlineTrustMatrixScheme string
-
-// InlineTrustMatrixEntry Represents an entry in the trust matrix.
-//
-// Denotes that one peer (`i`) places a direct trust in another peer (`j`)
-// by a specific amount (`v`).
-type InlineTrustMatrixEntry struct {
-	// I Denotes the trusting peer.
-	//
-	// It is a zero-based index,
-	// and must be less than the size (dimension)
-	// of the enclosing trust matrix.
-	I int `json:"i"`
-
-	// J Denotes the trusted peer.
-	//
-	// It is a zero-based index,
-	// and must be less than the size (dimension)
-	// of the enclosing trust matrix.
-	J int `json:"j"`
-
-	// V Represents the (positive) amount of trust
-	// placed by peer `i` in peer `j`.
-	V float64 `json:"v"`
-}
-
-// InlineTrustVector Refers to a trust vector "inline".
-//
-// Instead of pointing (referencing) to an externally stored trust vector,
-// it carries the contents of the trust vector
-// within the reference object itself.
-type InlineTrustVector struct {
-	// Entries Contains the non-zero entries in the trust vector.
-	//
-	// Peers missing here are assigned zero amount of trust.
-	Entries []InlineTrustVectorEntry `json:"entries"`
-
-	// Scheme A fixed string `"inline"` to denote an inline reference.
-	Scheme InlineTrustVectorScheme `json:"scheme"`
-
-	// Size Denotes the number of peers in the trust vector, i.e. its length.
-	Size int `json:"size"`
-}
-
-// InlineTrustVectorScheme A fixed string `"inline"` to denote an inline reference.
-type InlineTrustVectorScheme string
-
-// InlineTrustVectorEntry Represents an entry in the trust vector.
-//
-// Denotes that a trust is placed in a peer (`i`)
-// by a specific amount (`v`).
-type InlineTrustVectorEntry struct {
-	// I Denotes the peer.
-	//
-	// It is a zero-based index,
-	// and must be less than the length of the enclosing trust vector.
-	I int `json:"i"`
-
-	// V Represents the (positive) amount of trust placed in peer `i`.
-	V float64 `json:"v"`
 }
 
 // InvalidRequest defines model for InvalidRequest.
@@ -306,35 +424,16 @@ type InvalidRequest struct {
 	Message string `json:"message"`
 }
 
-// ObjectStorageTrustMatrix Refers to a trust matrix in a remote object storage service.
-type ObjectStorageTrustMatrix struct {
-	// Scheme A fixed string `"objectstorage"`.
-	Scheme ObjectStorageTrustMatrixScheme `json:"scheme"`
-
-	// Url URL of the trust matrix file.
+// ObjectStorageTrustRef Refers to a trust collection in a remote object storage service.
+type ObjectStorageTrustRef struct {
+	// Url URL of the trust collection file.
 	//
-	// It must refer to a CSV file, with three columns `i`, `j`, and `v`.
+	// It must refer to a CSV file,
+	// with three columns `i`, `j`, and `v` (for trust matrix)
+	// or two columns `i` and `v` (for trust vector).
 	// Currently the `s3://` URL scheme (AWS S3) is supported.
 	Url string `json:"url"`
 }
-
-// ObjectStorageTrustMatrixScheme A fixed string `"objectstorage"`.
-type ObjectStorageTrustMatrixScheme string
-
-// ObjectStorageTrustVector Refers to a trust vector in a remote object storage service.
-type ObjectStorageTrustVector struct {
-	// Scheme A fixed string `"objectstorage"`.
-	Scheme ObjectStorageTrustVectorScheme `json:"scheme"`
-
-	// Url URL of the trust vector file.
-	//
-	// It must refer to a CSV file, with two columns `i` and `v`.
-	// Currently the `s3://` URL scheme (AWS S3) is supported.
-	Url string `json:"url"`
-}
-
-// ObjectStorageTrustVectorScheme A fixed string `"objectstorage"`.
-type ObjectStorageTrustVectorScheme string
 
 // ServerStatus defines model for ServerStatus.
 type ServerStatus struct {
@@ -342,55 +441,86 @@ type ServerStatus struct {
 	Message string `json:"message"`
 }
 
-// StoredTrustMatrix Refers to a trust matrix stored on the server.
+// StoredTrustId An identifier of a stored trust collection (matrix/vector).
 //
-// Stored trust matrix is identified with its ID string.
-type StoredTrustMatrix struct {
-	// Id Denotes a trust collection (matrix/vector).
-	Id TrustCollectionId `json:"id"`
+// It identifies a trust collection within the local server.
+type StoredTrustId = string
 
-	// Scheme A fixed string `"stored"`.
-	Scheme StoredTrustMatrixScheme `json:"scheme"`
+// StoredTrustRef A trust collection stored on the server and identified with a string.
+type StoredTrustRef struct {
+	// Id An identifier of a stored trust collection (matrix/vector).
+	//
+	// It identifies a trust collection within the local server.
+	Id StoredTrustId `json:"id"`
 }
 
-// StoredTrustMatrixScheme A fixed string `"stored"`.
-type StoredTrustMatrixScheme string
+// TrustMatrixEntryIndices Represents the location (indices) of a trust matrix entry.
+type TrustMatrixEntryIndices struct {
+	// I The row index.
+	I int `json:"i"`
 
-// TrustCollectionId Denotes a trust collection (matrix/vector).
-type TrustCollectionId = string
+	// J The column index.
+	J int `json:"j"`
+}
 
-// TrustMatrixRef defines model for TrustMatrixRef.
-type TrustMatrixRef struct {
+// TrustRef A trust collection (matrix/vector).
+//
+// Individual entry values in the collection represent trust levels;
+// the index/-ices – that is, the coordinate/-s – of an entry
+// indicate the peer/-s to which the trust level (value) is bound.
+//
+// The actual nature of this binding between peer/-s and the trust level
+// is up to the context.
+// For example, in a global trust (vector) the entry index denotes
+// the peer to which the trust value is assigned,
+// (the network trusts this peer by the trust level amount;
+// the peer is the "trustee"),
+// while in a column vector of a local trust matrix the entry index denotes
+// the peer from which the inbound trust is originating
+// (the peer is the "truster").
+type TrustRef struct {
 	// Scheme Trust reference scheme, akin to URI scheme.
-	Scheme TrustMatrixRefScheme `json:"scheme"`
+	Scheme TrustRefScheme `json:"scheme"`
 	union  json.RawMessage
 }
 
-// TrustMatrixRefScheme Trust reference scheme, akin to URI scheme.
-type TrustMatrixRefScheme string
+// TrustRefScheme Trust reference scheme, akin to URI scheme.
+type TrustRefScheme string
 
-// TrustVectorRef defines model for TrustVectorRef.
-type TrustVectorRef struct {
-	// Scheme Trust vector reference scheme, akin to URI scheme.
-	Scheme TrustVectorRefScheme `json:"scheme"`
-	union  json.RawMessage
+// TrustVectorEntryIndex Represents the location (index) of a trust vector entry.
+type TrustVectorEntryIndex struct {
+	// I The index.
+	I int `json:"i"`
 }
 
-// TrustVectorRefScheme Trust vector reference scheme, akin to URI scheme.
-type TrustVectorRefScheme string
-
-// LocalTrustIdParam Denotes a trust collection (matrix/vector).
-type LocalTrustIdParam = TrustCollectionId
-
-// ComputeResponseOK Refers to a trust vector.
-type ComputeResponseOK = TrustVectorRef
-
-// LocalTrustGetResponseOK Refers to a trust matrix "inline".
+// LocalTrustIdParam An identifier of a stored trust collection (matrix/vector).
 //
-// Instead of pointing (referencing) to an externally stored trust matrix,
-// it carries the contents of the trust matrix
+// It identifies a trust collection within the local server.
+type LocalTrustIdParam = StoredTrustId
+
+// ComputeResponseOK A trust collection (matrix/vector).
+//
+// Individual entry values in the collection represent trust levels;
+// the index/-ices – that is, the coordinate/-s – of an entry
+// indicate the peer/-s to which the trust level (value) is bound.
+//
+// The actual nature of this binding between peer/-s and the trust level
+// is up to the context.
+// For example, in a global trust (vector) the entry index denotes
+// the peer to which the trust value is assigned,
+// (the network trusts this peer by the trust level amount;
+// the peer is the "trustee"),
+// while in a column vector of a local trust matrix the entry index denotes
+// the peer from which the inbound trust is originating
+// (the peer is the "truster").
+type ComputeResponseOK = TrustRef
+
+// LocalTrustGetResponseOK An inline "reference" to a trust collection.
+//
+// Instead of pointing (referencing) to an externally stored collection,
+// it carries the contents (individual sparse entries) of the collection
 // within the reference object itself.
-type LocalTrustGetResponseOK = InlineTrustMatrix
+type LocalTrustGetResponseOK = InlineTrustRef
 
 // ServerNotReady defines model for ServerNotReady.
 type ServerNotReady = ServerStatus
@@ -416,24 +546,24 @@ type ComputeJSONRequestBody = ComputeRequestBody
 type ComputeWithStatsJSONRequestBody = ComputeRequestBody
 
 // UpdateLocalTrustJSONRequestBody defines body for UpdateLocalTrust for application/json ContentType.
-type UpdateLocalTrustJSONRequestBody = TrustMatrixRef
+type UpdateLocalTrustJSONRequestBody = TrustRef
 
-// AsInlineTrustMatrix returns the union data inside the TrustMatrixRef as a InlineTrustMatrix
-func (t TrustMatrixRef) AsInlineTrustMatrix() (InlineTrustMatrix, error) {
-	var body InlineTrustMatrix
+// AsTrustMatrixEntryIndices returns the union data inside the InlineTrustEntry as a TrustMatrixEntryIndices
+func (t InlineTrustEntry) AsTrustMatrixEntryIndices() (TrustMatrixEntryIndices, error) {
+	var body TrustMatrixEntryIndices
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromInlineTrustMatrix overwrites any union data inside the TrustMatrixRef as the provided InlineTrustMatrix
-func (t *TrustMatrixRef) FromInlineTrustMatrix(v InlineTrustMatrix) error {
+// FromTrustMatrixEntryIndices overwrites any union data inside the InlineTrustEntry as the provided TrustMatrixEntryIndices
+func (t *InlineTrustEntry) FromTrustMatrixEntryIndices(v TrustMatrixEntryIndices) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeInlineTrustMatrix performs a merge with any union data inside the TrustMatrixRef, using the provided InlineTrustMatrix
-func (t *TrustMatrixRef) MergeInlineTrustMatrix(v InlineTrustMatrix) error {
+// MergeTrustMatrixEntryIndices performs a merge with any union data inside the InlineTrustEntry, using the provided TrustMatrixEntryIndices
+func (t *InlineTrustEntry) MergeTrustMatrixEntryIndices(v TrustMatrixEntryIndices) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -444,22 +574,22 @@ func (t *TrustMatrixRef) MergeInlineTrustMatrix(v InlineTrustMatrix) error {
 	return err
 }
 
-// AsStoredTrustMatrix returns the union data inside the TrustMatrixRef as a StoredTrustMatrix
-func (t TrustMatrixRef) AsStoredTrustMatrix() (StoredTrustMatrix, error) {
-	var body StoredTrustMatrix
+// AsTrustVectorEntryIndex returns the union data inside the InlineTrustEntry as a TrustVectorEntryIndex
+func (t InlineTrustEntry) AsTrustVectorEntryIndex() (TrustVectorEntryIndex, error) {
+	var body TrustVectorEntryIndex
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromStoredTrustMatrix overwrites any union data inside the TrustMatrixRef as the provided StoredTrustMatrix
-func (t *TrustMatrixRef) FromStoredTrustMatrix(v StoredTrustMatrix) error {
+// FromTrustVectorEntryIndex overwrites any union data inside the InlineTrustEntry as the provided TrustVectorEntryIndex
+func (t *InlineTrustEntry) FromTrustVectorEntryIndex(v TrustVectorEntryIndex) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeStoredTrustMatrix performs a merge with any union data inside the TrustMatrixRef, using the provided StoredTrustMatrix
-func (t *TrustMatrixRef) MergeStoredTrustMatrix(v StoredTrustMatrix) error {
+// MergeTrustVectorEntryIndex performs a merge with any union data inside the InlineTrustEntry, using the provided TrustVectorEntryIndex
+func (t *InlineTrustEntry) MergeTrustVectorEntryIndex(v TrustVectorEntryIndex) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -470,33 +600,7 @@ func (t *TrustMatrixRef) MergeStoredTrustMatrix(v StoredTrustMatrix) error {
 	return err
 }
 
-// AsObjectStorageTrustMatrix returns the union data inside the TrustMatrixRef as a ObjectStorageTrustMatrix
-func (t TrustMatrixRef) AsObjectStorageTrustMatrix() (ObjectStorageTrustMatrix, error) {
-	var body ObjectStorageTrustMatrix
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromObjectStorageTrustMatrix overwrites any union data inside the TrustMatrixRef as the provided ObjectStorageTrustMatrix
-func (t *TrustMatrixRef) FromObjectStorageTrustMatrix(v ObjectStorageTrustMatrix) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeObjectStorageTrustMatrix performs a merge with any union data inside the TrustMatrixRef, using the provided ObjectStorageTrustMatrix
-func (t *TrustMatrixRef) MergeObjectStorageTrustMatrix(v ObjectStorageTrustMatrix) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t TrustMatrixRef) MarshalJSON() ([]byte, error) {
+func (t InlineTrustEntry) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	if err != nil {
 		return nil, err
@@ -509,16 +613,16 @@ func (t TrustMatrixRef) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	object["scheme"], err = json.Marshal(t.Scheme)
+	object["v"], err = json.Marshal(t.V)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'scheme': %w", err)
+		return nil, fmt.Errorf("error marshaling 'v': %w", err)
 	}
 
 	b, err = json.Marshal(object)
 	return b, err
 }
 
-func (t *TrustMatrixRef) UnmarshalJSON(b []byte) error {
+func (t *InlineTrustEntry) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	if err != nil {
 		return err
@@ -529,32 +633,32 @@ func (t *TrustMatrixRef) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	if raw, found := object["scheme"]; found {
-		err = json.Unmarshal(raw, &t.Scheme)
+	if raw, found := object["v"]; found {
+		err = json.Unmarshal(raw, &t.V)
 		if err != nil {
-			return fmt.Errorf("error reading 'scheme': %w", err)
+			return fmt.Errorf("error reading 'v': %w", err)
 		}
 	}
 
 	return err
 }
 
-// AsInlineTrustVector returns the union data inside the TrustVectorRef as a InlineTrustVector
-func (t TrustVectorRef) AsInlineTrustVector() (InlineTrustVector, error) {
-	var body InlineTrustVector
+// AsInlineTrustRef returns the union data inside the TrustRef as a InlineTrustRef
+func (t TrustRef) AsInlineTrustRef() (InlineTrustRef, error) {
+	var body InlineTrustRef
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromInlineTrustVector overwrites any union data inside the TrustVectorRef as the provided InlineTrustVector
-func (t *TrustVectorRef) FromInlineTrustVector(v InlineTrustVector) error {
+// FromInlineTrustRef overwrites any union data inside the TrustRef as the provided InlineTrustRef
+func (t *TrustRef) FromInlineTrustRef(v InlineTrustRef) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeInlineTrustVector performs a merge with any union data inside the TrustVectorRef, using the provided InlineTrustVector
-func (t *TrustVectorRef) MergeInlineTrustVector(v InlineTrustVector) error {
+// MergeInlineTrustRef performs a merge with any union data inside the TrustRef, using the provided InlineTrustRef
+func (t *TrustRef) MergeInlineTrustRef(v InlineTrustRef) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -565,22 +669,22 @@ func (t *TrustVectorRef) MergeInlineTrustVector(v InlineTrustVector) error {
 	return err
 }
 
-// AsObjectStorageTrustVector returns the union data inside the TrustVectorRef as a ObjectStorageTrustVector
-func (t TrustVectorRef) AsObjectStorageTrustVector() (ObjectStorageTrustVector, error) {
-	var body ObjectStorageTrustVector
+// AsStoredTrustRef returns the union data inside the TrustRef as a StoredTrustRef
+func (t TrustRef) AsStoredTrustRef() (StoredTrustRef, error) {
+	var body StoredTrustRef
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromObjectStorageTrustVector overwrites any union data inside the TrustVectorRef as the provided ObjectStorageTrustVector
-func (t *TrustVectorRef) FromObjectStorageTrustVector(v ObjectStorageTrustVector) error {
+// FromStoredTrustRef overwrites any union data inside the TrustRef as the provided StoredTrustRef
+func (t *TrustRef) FromStoredTrustRef(v StoredTrustRef) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeObjectStorageTrustVector performs a merge with any union data inside the TrustVectorRef, using the provided ObjectStorageTrustVector
-func (t *TrustVectorRef) MergeObjectStorageTrustVector(v ObjectStorageTrustVector) error {
+// MergeStoredTrustRef performs a merge with any union data inside the TrustRef, using the provided StoredTrustRef
+func (t *TrustRef) MergeStoredTrustRef(v StoredTrustRef) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -591,7 +695,33 @@ func (t *TrustVectorRef) MergeObjectStorageTrustVector(v ObjectStorageTrustVecto
 	return err
 }
 
-func (t TrustVectorRef) MarshalJSON() ([]byte, error) {
+// AsObjectStorageTrustRef returns the union data inside the TrustRef as a ObjectStorageTrustRef
+func (t TrustRef) AsObjectStorageTrustRef() (ObjectStorageTrustRef, error) {
+	var body ObjectStorageTrustRef
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromObjectStorageTrustRef overwrites any union data inside the TrustRef as the provided ObjectStorageTrustRef
+func (t *TrustRef) FromObjectStorageTrustRef(v ObjectStorageTrustRef) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeObjectStorageTrustRef performs a merge with any union data inside the TrustRef, using the provided ObjectStorageTrustRef
+func (t *TrustRef) MergeObjectStorageTrustRef(v ObjectStorageTrustRef) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t TrustRef) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	if err != nil {
 		return nil, err
@@ -613,7 +743,7 @@ func (t TrustVectorRef) MarshalJSON() ([]byte, error) {
 	return b, err
 }
 
-func (t *TrustVectorRef) UnmarshalJSON(b []byte) error {
+func (t *TrustRef) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	if err != nil {
 		return err
@@ -1808,13 +1938,13 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 }
 
-type ComputeResponseOKJSONResponse TrustVectorRef
+type ComputeResponseOKJSONResponse TrustRef
 
 type ComputeWithStatsResponseOKJSONResponse ComputeWithStatsResponseOK
 
 type InvalidRequestJSONResponse InvalidRequest
 
-type LocalTrustGetResponseOKJSONResponse InlineTrustMatrix
+type LocalTrustGetResponseOKJSONResponse InlineTrustRef
 
 type ServerNotReadyJSONResponse ServerStatus
 
@@ -2246,89 +2376,89 @@ func (sh *strictHandler) GetStatus(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+x83XLctpL/q6Co/7+OZpeaL0mWPalcOLaTVR2fxGU7OReZVAlDNoewSYABwJEmKVXl",
-	"Hc7t7u0+WJ5kqxsgh+RwNCNZzvpicxHLFD4a3b/+RMO/B5HKCyVBWhPMfg/ghudFBvTzC5UXpYW38GsJ",
-	"xv5DGCPk8rWKePZel8bikBhMpEVhhZLBLLiUzKbCML9IyDIczCyOZos1O5oyYVjuFhqV8qNU13I4l29A",
-	"s1diCZLWZTxbKi1smodzKSxO4caUOcTMKrYAZlNghufAuKGfCw0ntMdwLt+nHGeEfq/GREfF0ZhxGbOj",
-	"STiX9EXIJTuasESVmlmRA85heRml+OfReDiXQRiYMs+5Xgez4Dk7PSkAdHVGdi1sWh2pe17OcGgQBiue",
-	"lYD84lmR8mA2Hk7CIGtxEqTVAvn+8++BCGbjMPgQzCZhsApmk9uw8W1K3079t0nj2+T2lzAwUQo5BLNA",
-	"yExIQOLFb0ATgkLDHfs1dnL7nt293u1tuA8iz2X8prHnHrRIZdkHEtL0b6bNyxJRYRSKey5reTfQdDeK",
-	"OCulSJTOWWtuaSBmImFStb+bAiKRCIgRJBWgUJSIiD//+NfRlHHdwB3EDH4teZatCYEgmZDMllqGhM8d",
-	"6DiazuXh2EZdGMJwF65hBXqtJDQIeSBuUT3qXb8U7G5j7Z3AY0y2YfW+gSlWcGNQpVsnVAk79eI89vIc",
-	"hOw6BQ2zuZzLE7QSNNQ4Q0EfHP781yn7849/MXstImjZCz96shkYIkPp47T+OA4ZyVJDJAqtIm4Bv/7N",
-	"sMqMzWVtqLpQ+8pDQCoceDTBn5tIbFiyXGlEFJfOkM3lmxrlxmqQS5uy4yuS69UA1xkPJzTu0oLmyE9m",
-	"Uw0mVVnMjq+gMCJT0g3lCwPSfoUKAtLBFvQKNCoVMjyGhJeZZQSfuVxw1LWyUG6sLPMFaJSEl8PpoItY",
-	"J+AObD8Zj+Ph9LwHkuPhxXkvKt23KX0bP5KVHQ+nLTs7Hj59GPqne9AvTJ89WQlVNqwu3ERQWA/8n5C5",
-	"hiBnIp5BzGKRJKBB2mz9FY7ogwaJpAuQpViBZHBTZCISlixSwz0jLQ6JGawgM2gQa1pJ4sdHYzKjeKCI",
-	"GxjMZazIR6R8Bd5cIvA9oUqziEslRcQz8RvE1YpRJhxQlczoi9BMQ8atWAHL+VIKW8b4k7WgjacSasKZ",
-	"2D7wXNZn/XoCJ5PxVYjbj4fj6r/JgGw72YVESNBODemE4jc4cergdQSXm8DJEzZip62VTv/8478H4Vwa",
-	"xYRl1yLLmOUfwel1TZfZrL0l3blE10kzNRjURyHddB5FpeYWmObyo5DLcC6B/B56D8ZzRW7hGvQJDoDY",
-	"K6oErp3wuMicrWi7cdRp4nRlYm2qymUazmWHZYiRGBIhhQXcUTK1Av1RZNnMSaAWkqfQE9X2w3Q0BEWU",
-	"crmEueSJRcOCFHCWwHWDT0TuS4SbKnANRDnISJWaL50vhZsCtMhB2rlE62tLCayGNXlbwo8EiA1ybLgc",
-	"YgBRQYtZVdCmUYZ8uhZSVhvhFAooOIsU1wYRnnG9BD1o7EDHycRH5Igpk0REcJBddO78uJQSIjCGa5Gt",
-	"B4Q85tfeZTmrX89IKp/Fs38OG/rwSNUUShq4O3zwhlP7wV7w7M8//rOX+3/+8V9MO8Ps3Cz+znlpnOZg",
-	"4ESUimUKxnrbRxIJWZQpA9l6LhOVoc6R7aINjsZfMeficaEMeDUV4nv7yx2+6Gx8ejp9djo5vXh2Nr24",
-	"6LqmycX44uzZ5PR8fHFxfnpxsZGmmz09fzadnJ9PJtOnk6fn53sEsUMO08eRw1zuVYOGqBhfqBWQwL5X",
-	"lgIl2/BLq40rJIOpNMvAGCZikFZQNKko+unxqUQGjSbTTOZ88v9rXxqhYY4hV9JYtE1ySfuSBlaEsmtu",
-	"mkbxM5iBuwHx5NnTyXh69uT0ST8ixk8nz56ePXs6fdIPienk2bPJ9PzJXkRcyhXPROwjm1fuJD2a+ZwV",
-	"XPMc0L7TDOeVQWulHXfqk+V4+CVuGHGJ3iFTPG7mADPmqw+txEBDwuy6gIAsRr0bFUM2Se1l/AZ/s03g",
-	"lYivWAxSYThP+tpYO1JZBhFRLCSjowolHd0CZxfcpkEYSO4YFQdhgEAVGuJgZnUJno0cN/5/GpJgFhyN",
-	"NtWbkfutGRGRL+rtLmN3HI/6b1Qs+so736h4jV8jJS1IMry8wBCIuDz6YPCI7fpQb0Woj7Jq0mhfRek2",
-	"DPbVED5l/eZSt2HQ8AH3WLWaVS8wfdAC0wCFcphEeyRFIm3D702NV5YozTDOoGkN17SFKQcMZ13boHDf",
-	"fvj7PTFxb5623fFDmNp2JIdzlXDwE0RW6beQ9HH0XRmhGU1KDIk9N2PS7EadyURKwyZvqH3VQsVrtCgU",
-	"A6vurBXtS+UiYfzfMH/BpMYojfsIyZAckDE6CKVjlzBXydbqakCZAafl1cJyIRmvLJkLmVHkG5/7T2HT",
-	"d5Zbcy/p3guifVt8FsYi0VxIZ2frFdwUZMk1ZBn+ueIaXfNcGsutMFZEhuoqnkGGHedcrl2u4etpKbAk",
-	"4/YEM5xNFXHgedn2VvfUjqZzuxPcO3zi4eDukNkjgxeUFzOD/+PolGhC01jchg2v9x3YzwCbS4oHaIN/",
-	"cKvFTR+lTvpEFsQdp0o0mCEZDqo/fa/sW+AH+bLDSHTLIqhL04tlV/ZyFTmmcW+CESbqnuomff9bxO0k",
-	"rIZU0/6TL6EPhcZk2fqYwWeOGPlQ6QLjvfMwSJTOuQ1mQazKBWUdOb8ReZlT1JgL6X4ehwGFV7PA1f+Q",
-	"K1EK0cdvNfzac0GQ+CLSsRyEDG6EZZHGdF5wCstpKsSu9s1kO9O/tJU5dVV+iWD5UEoXgvnq96bQaTD5",
-	"0mwe5CouM8XkPGALSPlKKF0l+tuTvr4gY1Kf4evzudxNpytNXIwm09HkYjQcDtsUv/QVU2HYZMb2LeMO",
-	"XS/gnHvN6UnNaSEtLB2r61T/908RGNrG91xkfSkbpqhUVVZJbUepUjSXx1UVp5SuVBOzRKt8kzzVRxn4",
-	"S5ec7kmAGQCUY0LFbNC5kJuUSUNUauPOP2Y5cGkY32xLVRfSS79O6Os6zamUZfp10YeoDLI1axSsPd86",
-	"LB73sVhIYcWeaHhX/NGtveyd6yymn5vzmw0u+2XjRdwovjdqiA5V16mIUrQSxqpiLgG1TyRM2RT0hvlK",
-	"tpGJDM7BNmQgFctELuwhPGtp1A7K3QL9lFvFCtCI6IMJdsR6haMVahUOPQ/8DV5Vo6VBk0O0TJb5a+Cx",
-	"Txu3z7I5g1XFSaUVvlaq0EoZEYN29ojKC6UulKHCak9cMmSsYnp1B3gI04s9KdXOILmZQfzcROwv9TZq",
-	"8QEiG2xdWlQpJs+yHxKqOhwQUXpPdBveJ0WqJu2naZejgyTB9HkFl5+k0fUyrz9BtetF3jxQaGGwzNTi",
-	"gfs/SOI7Uo0Oj+tY//4HqrwQbbJv+retwd0TNcjortt3wm+7O7dV/NttFWWYe7i0g4p1VXIWhB2GxJBZ",
-	"/r3Seb/lqC7auKn8awo8rn7OuLEbA1Flls0YyCoqBZ7QrYZ3at5kXqcgyYyX1A/QZ2fIqPTEDXfFCi4a",
-	"6D/NZg8fMxwbvg7Za7oblK6ySmd6/e+TprlPeby5KfSsHFTH9QXjfj+BQUWkyiymaICvIJ7LxXr3kefy",
-	"uOCm/i0K3bVXVGni5gYUJcwWkKnrwVxepyIDxqNUwKoKVBy1dAV3iHn25+rnnK8PVK7DX6IzIWMRUcL8",
-	"xl3VKcsSVcqYpaDB3Zr+BloxZwzqXoMgDIQFZwTvpsp/4VrzNf29Ov8OOsvl0uVslf/eMGxTyj2ueDtw",
-	"UTtdCzrPXcWICc9MI5g0TC2o2SAezqXPjWfsMmG85klBt7mSPf/mxcuXr169evVt/R8V1qsF5vIYeJSy",
-	"DHA89TWwWBgrZFQXUQZV8NmszGucRvd5C2VT9vIlqTfuRAFGl+K5VEmF8wkNPaWChrPrdDl+2bjrDtn7",
-	"ilNfn1FHUs1KIX0pyComllJpIFUx23vux1nXtDttbco1bNikDSr7zOJ2Jr+Fibd1MawqU+U0ks39vcA8",
-	"8DfKxnrDVighKdg/pkoayIgEgktIBjcoY7qvNlZptHCNVV3zYMS1FlCViVy1oLKYzdHu6khInxr4axrm",
-	"zseENZAljqEdH1bdoXQP+6JZoJJKnpDq+eHMb9SkwBW66G5Pj9wdH7CCC133uDk9RnihVVqietCisdBI",
-	"ZKtNTKr6TiNz9i8VRUfZ71WYeSWtXvcZgepuZ/u6JhE3mE9ZjbRfbYR85egAibD8uboT2oDKzaC16Zao",
-	"u/LLxhVLt5Goh7EVS4Q1zPxaIv9ikYM0B6XNHR3xp/WkhbX8D1IJx8MevSg0GEImohoH7QTI5uzcMiWr",
-	"XpkrcTVgRcYj13vVAASuxKXLh/zYD1cDcny8anSMGM9VKa2rKnvp1GXLviaq810tfG3tEHcLr27ARcJ8",
-	"45mzwYhr3yQjZAw3Pm+vSgKbq9Wqo4Yd1zIdkLHFX4CMMkWa0+HjXv/74QDCfU/MF0X36k504drHhTIC",
-	"nc6gEjpuitvMJQFo03xwJa4QPe7nD1cPiAA7yiMC5CxSuUddXKh/iAfxNyeP7EHcqod6EDf6cA/SUq0d",
-	"l/DnrUv1ff0yzWXuGHm+raGP4b/qu6wq8tzjrzq4e5hXchB5TK+EmHC39+4+BD9vBPlX+SwPPVa7LBeV",
-	"/VWOqsnW+zuqBhJajqrSVmGYtzF0V7nxXQ/yR+3mMq829/VBn2bC2+Xurt2u2fFZ7XaDpZXZfhxTvctM",
-	"dy9A2/yue2+2uY5/W3i+U9uOg0Fa5lyeaOAxX2TA/AKVUHK+Rr5DXlj/qqGjch3Kq/37aP+BfnpnlebL",
-	"B+YqRLGGHM2Et+3GrUcN8HXDZguvtUF2M/yEIAxKneFJTmej0aKMPoI9kTyHUcFtOrJqlIgMhpFZBduw",
-	"PtzAtfbcir7bFPUZNKKxu82Pb1/3pVGMKK4k53uqXLLK2Yt3P9HvfX8cZpnoUrMylwZRG2KUQe8l2NUK",
-	"yXxRatd5TvtcEZuuGG7tTs+On//zHXt3OnApclFQYeQQkNTWEQ93GFLuHZP8H1L6keLZcx+kXKsmTr4M",
-	"hLSu3g+3gu83L2UMzW3Yu0+ybe8ogH2YUfPBr2o+5CHZvNuuqyAnXQ9sIiB2AsI45fKlR1JfmUTED+ha",
-	"vE8U506whVn3uQesu6Qt4l7mblO3M6jg2w2fx45zI4f8QR0QvPbl8UmPLnWuYVrXZofp93tdaxVlIm5c",
-	"yPhHjNkU+/Htpf/WG9uGFfPCHs0XNoOdWwwPVa5fMHpTEg64DexpFNpzI7itD/tm7IwObn9Bq3qYLoXM",
-	"+MeAjUalg/K+O19WTPoKLuPxY+WFoVPR4DRojPLyr38JcsmXkIO0faN2qs3m3u7BIPYu4y/A8o6dPjOk",
-	"fWxxf4BWEw8CaDMd6YjqlnpXEkWiqN8YvG83ZH7DjYjY8zeXjHpt8zo3cb/oe3tNfPMM7lsJswygLpxg",
-	"FoyH0+EYYaMKkLwQiMfhZDhGb8JtSjgZ+V5P8riq71m5v4He7iT1F31IsGsrE7IorWswfd5tlqY2OeMe",
-	"07px9EKSsX9jrxsNiJXOC8lMwbUB5vpQcNzmsW2d0985qnqSG1IHk6ImpxMqX1UVgwXYawDJ3NPgiVvg",
-	"FSVS9ZXNPWa7vtps6ziuXdBB+yvGs8y107i3MIr4zP17FFRhXnnEivVB87HBepfjb71H6G1x77SmT8fj",
-	"3Wv5caPt/vXbMDg7ZOZWx2zztc1OUNG4CpQnGAydmKox4BHx+Q6AVbtQd38M1R0fypDeH25eF7lrcG43",
-	"/6JCb2t1/c8q7O6ORolrsKWWVdTcK/G63eMLEH1vC/pnxYDPUuAGopLivQ03HTxIxZyWj34X8a3v9QBn",
-	"xtocfUnfG+1C7YdIO3zKZsho+6ES+oYOO892dG82bME1N8wRGWNIU/frDx/MTZx2wMaxAte8ADfC2GFH",
-	"Co4/zQnU3wS2L92hDr6NQtGkTa2/9a9emHbRtw/s34H93HI5gKu7WvIfh71vAePF1RaDU+DxTg5Px2dM",
-	"JF1GV/8yCW5jQnY2PnN+5FoY6GPvfwCPvwDcO3qHj8TPFylEH8li06/dlVDS5W5R9sD3teIxWeMKthGP",
-	"Uug+LJxLapHp533n9qLN7x+LmD+2pQn7rpG0ykzdTI9A4T0MZ6WkrpaqV+rypSsOJb6v5dg34g7CraeV",
-	"GpLNzZwGdw3uGshobWqSkrC9Q0jESOq+oWI67Fnc9Q7rJcRzKaTvArt7j8YLz19L0OvNE09aKGg+6PFB",
-	"+UKpDLgMbh2A7/M88x4v35otnlvvRp5vv4tV9Ih2yNgL11LYd0e2/b6w38Lt9zwlgbPH80zHk8NWiDTw",
-	"x/NdLaV2mtNWYvTzpi4Gen+05T98ufAhdr/5fOg2DM4Pn1M/iWqf4juwVRNpZlPXAe9rkg4Srg7oTME2",
-	"vzEP9IXMVFE3xGLN/s51zk/Za77w7WeubJ1aW5jZaMQLMfx4mg2FGi0wBRytJqMeo+FqpFly4hd2jHab",
-	"hUyXEre6or5dnzrhr666O85GLvLCVWZPx0/H9aaYMP9PAAAA//9++H2P+k4AAA==",
+	"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",
+	"40YAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

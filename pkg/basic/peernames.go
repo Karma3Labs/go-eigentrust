@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
-func ReadPeerNamesFromCsv(reader CsvReader) (
+func ReadPeerNamesFromCsv(reader util.CSVReader) (
 	names []string, indices map[string]int, err error,
 ) {
 	indices = map[string]int{}
@@ -29,26 +31,6 @@ func ReadPeerNamesFromCsv(reader CsvReader) (
 		return nil, nil, err
 	}
 	return names, indices, nil
-}
-
-// ParsePeerId parses s and returns the peer index.
-//
-// If peerIndices is not nil, s is considered to be a peer name found therein;
-// otherwise, s is considered to be a peer index integer literal.
-func ParsePeerId(s string, peerIndices map[string]int) (index int, err error) {
-	if peerIndices != nil {
-		var found bool
-		if index, found = peerIndices[s]; !found {
-			err = errors.New("unknown peer name")
-		}
-	} else {
-		if index, err = strconv.Atoi(s); err != nil {
-			err = fmt.Errorf("invalid peer index literal: %w", err)
-		} else if index < 0 {
-			err = errors.New("negative peer index")
-		}
-	}
-	return
 }
 
 // ParseTrustLevel parses s as a non-negative trust level and returns it.

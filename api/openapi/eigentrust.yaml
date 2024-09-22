@@ -75,7 +75,7 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/TrustMatrixRef"
+              $ref: "#/components/schemas/TrustRef"
         required: true
       responses:
         "200":
@@ -131,281 +131,146 @@ paths:
           $ref: "#/components/responses/ServerNotReady"
 components:
   schemas:
-    TrustCollectionId:
+    StoredTrustId:
       description: |
-        Denotes a trust collection (matrix/vector).
+        An identifier of a stored trust collection (matrix/vector).
+
+        It identifies a trust collection within the local server.
       type: string
       minLength: 1
-    TrustMatrixRef:
+    TrustRefScheme:
+      title: Trust reference scheme.
+      description: Trust reference scheme, akin to URI scheme.
+      type: string
+      enum: ["inline", "stored", "objectstorage"]
+    TrustRef:
       description: |
-        Refers to a trust matrix, such as local trust.
-      type: object
-      allOf:
-        - properties:
-            scheme:
-              title: Trust reference scheme.
-              description: |
-                Trust reference scheme, akin to URI scheme.
-              type: string
-              enum:
-                - inline
-                - stored
-                - objectstorage
-          required:
-            - scheme
-        - oneOf:
-            - $ref: "#/components/schemas/InlineTrustMatrix"
-            - $ref: "#/components/schemas/StoredTrustMatrix"
-            - $ref: "#/components/schemas/ObjectStorageTrustMatrix"
-      examples:
-        - scheme: inline
-          size: 3
-          entries:
-            - i: 0
-              j: 1
-              v: 1
-            - i: 0
-              j: 2
-              v: 1
-            - i: 1
-              j: 2
-              v: 100
-        - scheme: inline
-          size: 5
-          entries: [ ]
-        - scheme: stored
-          id: "3"
-        - scheme: stored
-          id: engagement
-    InlineTrustMatrix:
-      description: |
-        Refers to a trust matrix "inline".
+        A trust collection (matrix/vector).
 
-        Instead of pointing (referencing) to an externally stored trust matrix,
-        it carries the contents of the trust matrix
-        within the reference object itself.
+        Individual entry values in the collection represent trust levels;
+        the index/-ices – that is, the coordinate/-s – of an entry
+        indicate the peer/-s to which the trust level (value) is bound.
+
+        The actual nature of this binding between peer/-s and the trust level
+        is up to the context.
+        For example, in a global trust (vector) the entry index denotes
+        the peer to which the trust value is assigned,
+        (the network trusts this peer by the trust level amount;
+        the peer is the "trustee"),
+        while in a column vector of a local trust matrix the entry index denotes
+        the peer from which the inbound trust is originating
+        (the peer is the "truster").
       type: object
-      required:
-        - scheme
-        - size
-        - entries
       properties:
         scheme:
-          description: |
-            A fixed string `"inline"`.
-          type: string
-          enum: [ "inline" ]
+          $ref: "#/components/schemas/TrustRefScheme"
+      required:
+        - scheme
+      oneOf:
+        - $ref: "#/components/schemas/InlineTrustRef"
+        - $ref: "#/components/schemas/StoredTrustRef"
+        - $ref: "#/components/schemas/ObjectStorageTrustRef"
+    InlineTrustRef:
+      description: |
+        An inline "reference" to a trust collection.
+
+        Instead of pointing (referencing) to an externally stored collection,
+        it carries the contents (individual sparse entries) of the collection
+        within the reference object itself.
+      type: object
+      properties:
         size:
           description: |
-            Denotes the number of peers in the trust matrix,
-            i.e. its square dimension.
+            Denotes the number of peers in the trust collection,
+            i.e. its dimension.
           type: integer
           minimum: 1
         entries:
           description: |
-            Contains the non-zero entries in the trust matrix.
-
-            Truster/trustee pairs missing here are assigned zero direct trust,
-            i.e. no trust relationship.
+            Contains the non-zero entries in the trust collection.
           type: array
           items:
-            $ref: "#/components/schemas/InlineTrustMatrixEntry"
-    InlineTrustMatrixEntry:
-      description: |
-        Represents an entry in the trust matrix.
-
-        Denotes that one peer (`i`) places a direct trust in another peer (`j`)
-        by a specific amount (`v`).
-      type: object
+            $ref: "#/components/schemas/InlineTrustEntry"
       required:
-        - i
-        - j
+        - size
+        - entries
+    InlineTrustEntry:
+      description: |
+        Represents an entry in the trust collection.  Consists of the entry's
+        value (`v`) and the index/indices (position) in the collection.
+      type: object
+      properties:
+        v:
+          description: |
+            Represents the amount of trust bound to the peer/-s
+            indicated by the entry's index/-ices.
+          type: number
+          format: double
+      required:
         - v
+      oneOf:
+        - $ref: "#/components/schemas/TrustMatrixEntryIndices"
+        - $ref: "#/components/schemas/TrustVectorEntryIndex"
+    TrustMatrixEntryIndices:
+      description: |
+        Represents the location (indices) of a trust matrix entry.
+      type: object
       properties:
         i:
-          description: |
-            Denotes the trusting peer.
-
-            It is a zero-based index,
-            and must be less than the size (dimension)
-            of the enclosing trust matrix.
+          description: The row index.
           type: integer
           minimum: 0
         j:
-          description: |
-            Denotes the trusted peer.
-
-            It is a zero-based index,
-            and must be less than the size (dimension)
-            of the enclosing trust matrix.
+          description: The column index.
           type: integer
           minimum: 0
-        v:
-          description: |
-            Represents the (positive) amount of trust
-            placed by peer `i` in peer `j`.
-          type: number
-          format: double
-          minimum: 0  # should really be exclusiveMinimum
+      required:
+        - i
+        - j
       examples:
         - i: 0
           j: 1
-          v: 0.5
         - i: 1
           j: 2
-          v: 1
-    StoredTrustMatrix:
+    TrustVectorEntryIndex:
       description: |
-        Refers to a trust matrix stored on the server.
-
-        Stored trust matrix is identified with its ID string.
+        Represents the location (index) of a trust vector entry.
       type: object
-      required:
-        - scheme
-        - id
-      properties:
-        scheme:
-          description: |
-            A fixed string `"stored"`.
-          type: string
-          enum: [ "stored" ]
-        id:
-          $ref: "#/components/schemas/TrustCollectionId"
-    ObjectStorageTrustMatrix:
-      description: |
-        Refers to a trust matrix in a remote object storage service.
-      type: object
-      required:
-        - scheme
-        - url
-      properties:
-        scheme:
-          description: |
-            A fixed string `"objectstorage"`.
-          type: string
-          enum: [ "objectstorage" ]
-        url:
-          description: |
-            URL of the trust matrix file.
-
-            It must refer to a CSV file, with three columns `i`, `j`, and `v`.
-            Currently the `s3://` URL scheme (AWS S3) is supported.
-          type: string
-      examples:
-        - scheme: objectstorage
-          url: s3://bucket-name/path/to/file.csv
-    TrustVectorRef:
-      description: |
-        Refers to a trust vector.
-      type: object
-      allOf:
-        - properties:
-            scheme:
-              title: Trust vector reference scheme.
-              description: |
-                Trust vector reference scheme, akin to URI scheme.
-              type: string
-              enum:
-                - inline
-                - stored
-                - objectstorage
-          required:
-            - scheme
-        - oneOf:
-            - $ref: "#/components/schemas/InlineTrustVector"
-            - $ref: "#/components/schemas/ObjectStorageTrustVector"
-    InlineTrustVector:
-      description: |
-        Refers to a trust vector "inline".
-
-        Instead of pointing (referencing) to an externally stored trust vector,
-        it carries the contents of the trust vector
-        within the reference object itself.
-      type: object
-      required:
-        - scheme
-        - size
-        - entries
-      properties:
-        scheme:
-          description: |
-            A fixed string `"inline"` to denote an inline reference.
-          type: string
-          enum: [ "inline" ]
-        size:
-          description: |
-            Denotes the number of peers in the trust vector, i.e. its length.
-          type: integer
-          minimum: 1
-        entries:
-          description: |
-            Contains the non-zero entries in the trust vector.
-
-            Peers missing here are assigned zero amount of trust.
-          type: array
-          items:
-            $ref: "#/components/schemas/InlineTrustVectorEntry"
-      examples:
-        - scheme: inline
-          size: 3
-          entries:
-            - i: 0
-              v: 0.5
-            - i: 2
-              v: 1.0
-        - scheme: inline
-          size: 5
-          entries: [ ]
-    InlineTrustVectorEntry:
-      description: |
-        Represents an entry in the trust vector.
-
-        Denotes that a trust is placed in a peer (`i`)
-        by a specific amount (`v`).
-      type: object
-      required:
-        - i
-        - v
       properties:
         i:
-          description: |
-            Denotes the peer.
-
-            It is a zero-based index,
-            and must be less than the length of the enclosing trust vector.
+          description: The index.
           type: integer
           minimum: 0
-        v:
-          description: |
-            Represents the (positive) amount of trust placed in peer `i`.
-          type: number
-          format: double
-          minimum: 0  # should really be exclusiveMinimum
+      required:
+        - i
       examples:
         - i: 0
-          v: 1.0
-        - i: 2
-          v: 0.5
-    ObjectStorageTrustVector:
+        - i: 1
+    StoredTrustRef:
       description: |
-        Refers to a trust vector in a remote object storage service.
+        A trust collection stored on the server and identified with a string.
       type: object
-      required:
-        - scheme
-        - url
       properties:
-        scheme:
-          description: |
-            A fixed string `"objectstorage"`.
-          type: string
-          enum: [ "objectstorage" ]
+        id:
+          $ref: "#/components/schemas/StoredTrustId"
+      required:
+        - id
+    ObjectStorageTrustRef:
+      description: |
+        Refers to a trust collection in a remote object storage service.
+      type: object
+      properties:
         url:
           description: |
-            URL of the trust vector file.
+            URL of the trust collection file.
 
-            It must refer to a CSV file, with two columns `i` and `v`.
+            It must refer to a CSV file,
+            with three columns `i`, `j`, and `v` (for trust matrix)
+            or two columns `i` and `v` (for trust vector).
             Currently the `s3://` URL scheme (AWS S3) is supported.
           type: string
+      required:
+        - url
       examples:
         - scheme: objectstorage
           url: s3://bucket-name/path/to/file.csv
@@ -462,11 +327,11 @@ components:
         - localTrust
       properties:
         localTrust:
-          $ref: "#/components/schemas/TrustMatrixRef"
+          $ref: "#/components/schemas/TrustRef"
         initialTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
+          $ref: "#/components/schemas/TrustRef"
         preTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
+          $ref: "#/components/schemas/TrustRef"
         alpha:
           type: number
           format: double
@@ -523,22 +388,22 @@ components:
         - localTrust
       properties:
         globalTrust:
-          $ref: "#/components/schemas/TrustMatrixRef"
+          $ref: "#/components/schemas/TrustRef"
           description: |
             Where to store the compute result.
             If not given, return inline.
         effectiveLocalTrust:
-          $ref: "#/components/schemas/TrustMatrixRef"
+          $ref: "#/components/schemas/TrustRef"
           description: |
             Where to store the effective local trust used for compute.
             This is the local trust after canonicalization
             and pre-trust substitution (for peers without outbound trust).
         effectivePreTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
+          $ref: "#/components/schemas/TrustRef"
           description: |
             Where to store the effective pre-trust used for compute.
         effectiveInitialTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
+          $ref: "#/components/schemas/TrustRef"
           description: |
             Where to store the effective initial trust used for compute.
     ComputeRequestBody:
@@ -553,7 +418,7 @@ components:
         - flatTailStats
       properties:
         eigenTrust:
-          $ref: "#/components/schemas/TrustVectorRef"
+          $ref: "#/components/schemas/TrustRef"
         flatTailStats:
           $ref: "#/components/schemas/FlatTailStats"
     ServerStatus:
@@ -587,7 +452,7 @@ components:
       content:
         "application/json":
           schema:
-            $ref: "#/components/schemas/TrustVectorRef"
+            $ref: "#/components/schemas/TrustRef"
           examples:
             Simple1:
               $ref: "#/components/examples/ComputeResponseSimple1"
@@ -608,7 +473,7 @@ components:
       content:
         "application/json":
           schema:
-            $ref: "#/components/schemas/InlineTrustMatrix"
+            $ref: "#/components/schemas/InlineTrustRef"
     InvalidRequest:
       description: |
         Client sent an invalid request.
@@ -639,7 +504,7 @@ components:
       in: path
       required: true
       schema:
-        $ref: "#/components/schemas/TrustCollectionId"
+        $ref: "#/components/schemas/StoredTrustId"
   examples:
     ComputeRequestSimple1:
       summary: Simple 3-peer example

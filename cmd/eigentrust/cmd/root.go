@@ -35,6 +35,7 @@ as well as a client to interact with the server.`,
 				logWriter = w
 			}
 			logger = zerolog.New(logWriter).With().Timestamp().Logger()
+			zerolog.DefaultContextLogger = &logger
 			return nil
 		},
 	}

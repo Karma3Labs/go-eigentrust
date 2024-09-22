@@ -21,14 +21,18 @@ func TestExtractDistrust(t *testing.T) {
 		{
 			name: "test1",
 			args: args{
-				&sparse.Matrix{
+				localTrust: &sparse.Matrix{
 					CSMatrix: sparse.CSMatrix{
 						MajorDim: 3,
 						MinorDim: 3,
 						Entries: [][]sparse.Entry{
-							/* 0 */ {{0, 100}, {1, -50}, {2, -50}},
+							/* 0 */ {
+								{Index: 0, Value: 100},
+								{Index: 1, Value: -50},
+								{Index: 2, Value: -50},
+							},
 							/* 1 */ nil,
-							/* 2 */ {{0, -100}},
+							/* 2 */ {{Index: 0, Value: -100}},
 						},
 					},
 				},
@@ -38,7 +42,7 @@ func TestExtractDistrust(t *testing.T) {
 					MajorDim: 3,
 					MinorDim: 3,
 					Entries: [][]sparse.Entry{
-						/* 0 */ {{0, 100}},
+						/* 0 */ {{Index: 0, Value: 100}},
 						/* 1 */ nil,
 						/* 2 */ nil,
 					},
@@ -49,9 +53,9 @@ func TestExtractDistrust(t *testing.T) {
 					MajorDim: 3,
 					MinorDim: 3,
 					Entries: [][]sparse.Entry{
-						/* 0 */ {{1, 50}, {2, 50}},
+						/* 0 */ {{Index: 1, Value: 50}, {Index: 2, Value: 50}},
 						/* 1 */ nil,
-						/* 2 */ {{0, 100}},
+						/* 2 */ {{Index: 0, Value: 100}},
 					},
 				},
 			},

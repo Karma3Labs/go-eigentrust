@@ -14,11 +14,6 @@ import (
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
 
-// CsvReader reads from a CSV file.
-type CsvReader interface {
-	Read() (fields []string, err error)
-}
-
 // Canonicalize scales sparse entries in-place so that their values sum to one.
 //
 // If entries sum to zero, Canonicalize returns ErrZeroSum.

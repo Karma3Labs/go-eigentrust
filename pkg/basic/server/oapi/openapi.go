@@ -51,12 +51,12 @@ func (svr *StrictServerImpl) GetStatus(
 }
 
 func (svr *StrictServerImpl) compute(
-	ctx context.Context, localTrustRef *openapi.TrustMatrixRef,
-	initialTrust *openapi.TrustVectorRef, preTrust *openapi.TrustVectorRef,
+	ctx context.Context, localTrustRef *openapi.TrustRef,
+	initialTrust *openapi.TrustRef, preTrust *openapi.TrustRef,
 	alpha *float64, epsilon *float64,
 	flatTail *int, numLeaders *int,
 	maxIterations *int, minIterations *int, checkFreq *int,
-) (tv openapi.TrustVectorRef, flatTailStats openapi.FlatTailStats, err error) {
+) (tv openapi.TrustRef, flatTailStats openapi.FlatTailStats, err error) {
 	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
 	var (
 		c  *sparse.Matrix
@@ -197,18 +197,22 @@ func (svr *StrictServerImpl) compute(
 		err = fmt.Errorf("cannot apply local trust discounts: %w", err)
 		return
 	}
-	itv := openapi.InlineTrustVector{
-		Scheme: openapi.InlineTrustVectorSchemeInline,
-		Size:   t.Dim,
-	}
+	itv := openapi.InlineTrustRef{Size: t.Dim}
 	for _, e := range t.Entries {
-		itv.Entries = append(itv.Entries,
-			openapi.InlineTrustVectorEntry{I: e.Index, V: e.Value})
+		entry := openapi.InlineTrustEntry{V: e.Value}
+		err = entry.FromTrustVectorEntryIndex(openapi.TrustVectorEntryIndex{I: e.Index})
+		if err != nil {
+			err = fmt.Errorf("cannot build entry: %w", err)
+			return
+		}
+		itv.Entries = append(itv.Entries, entry)
 	}
-	if err = tv.FromInlineTrustVector(itv); err != nil {
+	if err = tv.FromInlineTrustRef(itv); err != nil {
 		err = fmt.Errorf("cannot create response: %w", err)
 		return
 	}
+	itv2, err := tv.AsInlineTrustRef()
+	itv2.Entries = itv.Entries[:0]
 	return tv, flatTailStats, nil
 }
 
@@ -285,38 +289,24 @@ func (svr *StrictServerImpl) GetLocalTrust(
 }
 
 func (svr *StrictServerImpl) getLocalTrust(
-	_ context.Context, id openapi.TrustCollectionId,
-) (*openapi.InlineTrustMatrix, error) {
+	ctx context.Context, id openapi.StoredTrustId,
+) (*openapi.InlineTrustRef, error) {
 	tm, ok := svr.core.StoredTrustMatrices.Load(id)
 	if !ok {
 		return nil, server.HTTPError{Code: 404}
 	}
 	var (
-		result openapi.InlineTrustMatrix
-		err    error
+		result *openapi.InlineTrustRef
 	)
-	err = tm.LockAndRun(func(c *sparse.Matrix, timestamp *big.Int) error {
-		result.Size, err = c.Dim()
-		if err != nil {
-			return fmt.Errorf("cannot get dimension: %w", err)
-		}
-		result.Entries = make([]openapi.InlineTrustMatrixEntry, 0, c.NNZ())
-		for i, row := range c.Entries {
-			for _, entry := range row {
-				result.Entries = append(result.Entries,
-					openapi.InlineTrustMatrixEntry{
-						I: i,
-						J: entry.Index,
-						V: entry.Value,
-					})
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := tm.LockAndRun(func(
+		c *sparse.Matrix, timestamp *big.Int,
+	) (err error) {
+		result, err = openapi.InlineFromMatrix(ctx, c)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 func (svr *StrictServerImpl) HeadLocalTrust(
@@ -383,23 +373,23 @@ func (svr *StrictServerImpl) DeleteLocalTrust(
 
 func (svr *StrictServerImpl) loadTrustMatrix(
 	ctx context.Context,
-	ref *openapi.TrustMatrixRef,
+	ref *openapi.TrustRef,
 ) (*sparse.Matrix, error) {
 	switch ref.Scheme {
-	case openapi.TrustMatrixRefSchemeInline:
-		inline, err := ref.AsInlineTrustMatrix()
+	case openapi.Inline:
+		inline, err := ref.AsInlineTrustRef()
 		if err != nil {
 			return nil, err
 		}
 		return svr.loadInlineTrustMatrix(&inline)
-	case openapi.TrustMatrixRefSchemeStored:
-		stored, err := ref.AsStoredTrustMatrix()
+	case openapi.Stored:
+		stored, err := ref.AsStoredTrustRef()
 		if err != nil {
 			return nil, err
 		}
 		return svr.loadStoredTrustMatrix(&stored)
-	case openapi.TrustMatrixRefSchemeObjectstorage:
-		objectStorage, err := ref.AsObjectStorageTrustMatrix()
+	case openapi.Objectstorage:
+		objectStorage, err := ref.AsObjectStorageTrustRef()
 		if err != nil {
 			return nil, err
 		}
@@ -410,24 +400,29 @@ func (svr *StrictServerImpl) loadTrustMatrix(
 }
 
 func (svr *StrictServerImpl) loadInlineTrustMatrix(
-	inline *openapi.InlineTrustMatrix,
+	inline *openapi.InlineTrustRef,
 ) (*sparse.Matrix, error) {
 	if inline.Size <= 0 {
 		return nil, fmt.Errorf("invalid size=%#v", inline.Size)
 	}
 	var entries []sparse.CooEntry
 	for idx, entry := range inline.Entries {
-		if entry.I < 0 || entry.I >= inline.Size {
-			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
-				idx, entry.I, inline.Size)
+		ij, err := entry.AsTrustMatrixEntryIndices()
+		if err != nil {
+			return nil, fmt.Errorf("entry %d: invalid or missing i/j: %w",
+				idx, err)
 		}
-		if entry.J < 0 || entry.J >= inline.Size {
+		if ij.I < 0 || ij.I >= inline.Size {
+			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
+				idx, ij.I, inline.Size)
+		}
+		if ij.J < 0 || ij.J >= inline.Size {
 			return nil, fmt.Errorf("entry %d: j=%d is out of range [0..%d)",
-				idx, entry.J, inline.Size)
+				idx, ij.J, inline.Size)
 		}
 		entries = append(entries, sparse.CooEntry{
-			Row:    entry.I,
-			Column: entry.J,
+			Row:    ij.I,
+			Column: ij.J,
 			Value:  entry.V,
 		})
 	}
@@ -439,7 +434,7 @@ func (svr *StrictServerImpl) loadInlineTrustMatrix(
 }
 
 func (svr *StrictServerImpl) loadStoredTrustMatrix(
-	stored *openapi.StoredTrustMatrix,
+	stored *openapi.StoredTrustRef,
 ) (c *sparse.Matrix, err error) {
 	tm0, ok := svr.core.StoredTrustMatrices.Load(stored.Id)
 	if ok {
@@ -460,7 +455,7 @@ func (svr *StrictServerImpl) loadStoredTrustMatrix(
 }
 
 func (svr *StrictServerImpl) loadObjectStorageTrustMatrix(
-	ctx context.Context, ref *openapi.ObjectStorageTrustMatrix,
+	ctx context.Context, ref *openapi.ObjectStorageTrustRef,
 ) (*sparse.Matrix, error) {
 	u, err := url.Parse(ref.Url)
 	if err != nil {
@@ -490,7 +485,7 @@ func (svr *StrictServerImpl) loadS3TrustMatrix(
 		return nil, fmt.Errorf("cannot load trust matrix from S3: %w", err)
 	}
 	defer util.Close(res.Body)
-	return svr.loadCsvTrustMatrix(csv.NewReader(res.Body))
+	return svr.loadCSVTrustMatrix(csv.NewReader(res.Body))
 }
 
 func (svr *StrictServerImpl) loadFileTrustMatrix(
@@ -501,11 +496,11 @@ func (svr *StrictServerImpl) loadFileTrustMatrix(
 		return nil, err
 	}
 	defer util.Close(f)
-	return svr.loadCsvTrustMatrix(csv.NewReader(f))
+	return svr.loadCSVTrustMatrix(csv.NewReader(f))
 }
 
-func (svr *StrictServerImpl) loadCsvTrustMatrix(
-	r *csv.Reader,
+func (svr *StrictServerImpl) loadCSVTrustMatrix(
+	r util.CSVReader,
 ) (*sparse.Matrix, error) {
 	header, err := r.Read()
 	if err != nil {
@@ -545,17 +540,17 @@ func (svr *StrictServerImpl) loadCsvTrustMatrix(
 
 func (svr *StrictServerImpl) loadTrustVector(
 	ctx context.Context,
-	ref *openapi.TrustVectorRef,
+	ref *openapi.TrustRef,
 ) (*sparse.Vector, error) {
 	switch ref.Scheme {
 	case openapi.Inline:
-		inline, err := ref.AsInlineTrustVector()
+		inline, err := ref.AsInlineTrustRef()
 		if err != nil {
 			return nil, err
 		}
 		return loadInlineTrustVector(&inline)
 	case openapi.Objectstorage:
-		objectStorage, err := ref.AsObjectStorageTrustVector()
+		objectStorage, err := ref.AsObjectStorageTrustRef()
 		if err != nil {
 			return nil, err
 		}
@@ -565,20 +560,25 @@ func (svr *StrictServerImpl) loadTrustVector(
 	}
 }
 
-func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
+func loadInlineTrustVector(inline *openapi.InlineTrustRef) (
 	*sparse.Vector, error,
 ) {
 	var entries []sparse.Entry
 	for idx, entry := range inline.Entries {
-		if entry.I < 0 || entry.I >= inline.Size {
+		i, err := entry.AsTrustVectorEntryIndex()
+		if err != nil {
+			return nil, fmt.Errorf("entry %d: invalid or missing i: %w",
+				idx, err)
+		}
+		if i.I < 0 || i.I >= inline.Size {
 			return nil, fmt.Errorf("entry %d: i=%d is out of range [0..%d)",
-				idx, entry.I, inline.Size)
+				idx, i.I, inline.Size)
 		}
 		if entry.V <= 0 {
 			return nil, fmt.Errorf("entry %d: v=%f is out of range (0, inf)",
 				idx, entry.V)
 		}
-		entries = append(entries, sparse.Entry{Index: entry.I, Value: entry.V})
+		entries = append(entries, sparse.Entry{Index: i.I, Value: entry.V})
 	}
 	// reset after move
 	size := inline.Size
@@ -588,7 +588,7 @@ func loadInlineTrustVector(inline *openapi.InlineTrustVector) (
 }
 
 func (svr *StrictServerImpl) loadObjectStorageTrustVector(
-	ctx context.Context, ref *openapi.ObjectStorageTrustVector,
+	ctx context.Context, ref *openapi.ObjectStorageTrustRef,
 ) (*sparse.Vector, error) {
 	u, err := url.Parse(ref.Url)
 	if err != nil {

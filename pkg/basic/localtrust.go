@@ -2,8 +2,6 @@ package basic
 
 import (
 	"errors"
-	"fmt"
-	"io"
 
 	"k3l.io/go-eigentrust/pkg/sparse"
 )
@@ -73,63 +71,4 @@ func ExtractDistrust(
 		distrust.Entries[truster] = distrustRow
 	}
 	return distrust, nil
-}
-
-// ReadLocalTrustFromCsv reads a local trust matrix from the given CSV file.
-func ReadLocalTrustFromCsv(
-	reader CsvReader, peerIndices map[string]int,
-) (*sparse.Matrix, error) {
-	parseFields := func(fields []string) (
-		from int, to int, level float64, err error,
-	) {
-		from, to = -1, -1
-		if len(fields) < 2 {
-			err = errors.New("too few fields")
-		} else if from, err = ParsePeerId(fields[0],
-			peerIndices); err != nil {
-			err = fmt.Errorf("invalid from %#v: %w", fields[0], err)
-		} else if to, err = ParsePeerId(fields[1], peerIndices); err != nil {
-			err = fmt.Errorf("invalid to %#v: %w", fields[1], err)
-		} else if len(fields) >= 3 {
-			if level, err = ParseTrustLevel(fields[2]); err != nil {
-				err = fmt.Errorf("invalid trust level %#v: %w", fields[2], err)
-			}
-		} else {
-			level = 1.0
-		}
-		return
-	}
-	count := 0
-	fields, err := reader.Read()
-	var entries []sparse.CooEntry
-	maxFrom, maxTo := -1, -1
-	for ; err == nil; fields, err = reader.Read() {
-		count++
-		from, to, level, err := parseFields(fields)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"cannot parse local trust CSV record #%d: %w", count, err)
-		}
-		if maxFrom < from {
-			maxFrom = from
-		}
-		if maxTo < to {
-			maxTo = to
-		}
-		entries = append(entries, sparse.CooEntry{
-			Row:    from,
-			Column: to,
-			Value:  level,
-		})
-	}
-	if err != io.EOF {
-		return nil, fmt.Errorf(
-			"cannot read local trust CSV record #%d: %w", count+1, err)
-	}
-	maxIndex := maxFrom
-	if maxIndex < maxTo {
-		maxIndex = maxTo
-	}
-	dim := maxIndex + 1
-	return sparse.NewCSRMatrix(dim, dim, entries, false), nil
 }
