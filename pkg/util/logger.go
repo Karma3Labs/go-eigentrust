@@ -1,6 +1,7 @@
 package util
 
 import (
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -48,6 +49,7 @@ func (p *TimeLogger) Log(name string) {
 // It returns the logger unmodified if the given stack frame doesn't exist.
 func LoggerWithCallerAtDepth(depth int, logger zerolog.Logger) zerolog.Logger {
 	pc, file, line, ok := runtime.Caller(depth + 1)
+	file = filepath.Base(file)
 	if !ok {
 		return logger
 	}
