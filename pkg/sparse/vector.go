@@ -3,8 +3,14 @@ package sparse
 import (
 	"context"
 	"math"
+	"slices"
 	"sort"
+	"strconv"
 	"sync"
+
+	"k3l.io/go-eigentrust/pkg/peer"
+	spopt "k3l.io/go-eigentrust/pkg/sparse/option"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 // Vector is a sparse vector.
@@ -26,8 +32,94 @@ func (v *Vector) NNZ() int {
 func NewVector(dim int, entries []Entry) *Vector {
 	return &Vector{
 		Dim:     dim,
-		Entries: SortEntriesByIndex(append(entries[:0:0], entries...)),
+		Entries: SortEntriesByIndex(slices.Clone(entries)),
 	}
+}
+
+// NewVectorFromEntries creates a new sparse vector with the given entries.
+func NewVectorFromEntries(
+	ctx context.Context, entries []Entry, opts ...spopt.Option,
+) (*Vector, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan Entry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- util.SendElements(ctx, entries, ch)
+	}()
+	v, err := NewVectorFromEntryCh(ctx, ch, opts...)
+	if err == nil {
+		err = util.ErrFromCh(ctx, sendErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// NewVectorFromEntryCh creates a new sparse vector with entries
+// taken from the given channel.
+func NewVectorFromEntryCh(
+	ctx context.Context, ch <-chan Entry, opts ...spopt.Option,
+) (*Vector, error) {
+	o := spopt.New(opts...)
+	v := &Vector{Dim: o.Row.Dim}
+EntryLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case e, ok := <-ch:
+			switch {
+			case !ok:
+				break EntryLoop
+			case e.Value == 0 && !o.Value.IncludeZero:
+				continue EntryLoop
+			case e.Value < 0 && !o.Value.AllowNegative:
+				return nil, NegativeValueError{e.Value}
+			}
+			if e.Index >= v.Dim {
+				if !o.Row.Grow {
+					return nil, util.IndexOutOfBoundsError{
+						Index: e.Index, Bound: o.Row.Dim,
+					}
+				}
+				v.SetDim(e.Index + 1)
+			}
+			v.Entries = append(v.Entries, e)
+		}
+	}
+	sort.Sort(EntriesByIndex(v.Entries))
+	v.Entries = util.ShrinkWrap(v.Entries)
+	return v, nil
+}
+
+// NewVectorFromCSV creates a new compressed sparse row matrix
+// with the given dimension and entries.
+//
+// The first CSV row is treated as the header row.
+func NewVectorFromCSV(
+	ctx context.Context, r util.CSVReader, opts ...spopt.Option,
+) (*Vector, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan Entry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- SendEntriesFromCSV(ctx, r, ch, opts...)
+	}()
+	v, err := NewVectorFromEntryCh(ctx, ch, opts...)
+	if err == nil {
+		err = util.ErrFromCh(ctx, sendErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // Assign clones (copies) the given vector into the receiver.
@@ -297,4 +389,62 @@ func (v *Vector) Merge(v2 *Vector) {
 func (v *Vector) Reset() {
 	v.Dim = 0
 	v.Entries = nil
+}
+
+// SendEntries sends all coordinate-format entries into a channel.
+func (v *Vector) SendEntries(
+	ctx context.Context, ch chan<- Entry, opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	for _, entry := range v.Entries {
+		if entry.Value == 0 && !o.Value.IncludeZero {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ch <- entry:
+		}
+	}
+	return nil
+}
+
+// WriteIntoCSV writes all entries into a CSV.
+func (v *Vector) WriteIntoCSV(
+	ctx context.Context, w util.CSVWriter, opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	err := w.Write([]string{o.Row.Name, o.Value.Name})
+	if err != nil {
+		return err
+	}
+	ch := make(chan Entry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- v.SendEntries(ctx, ch, opts...)
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case entry, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			var i, v string
+			i, err = peer.GetId(entry.Index, o.Row.PeerMap)
+			if err != nil {
+				return err
+			}
+			v = strconv.FormatFloat(entry.Value, 'f', -1, 64)
+			err = w.Write([]string{i, v})
+			if err != nil {
+				return err
+			}
+		}
+	}
 }

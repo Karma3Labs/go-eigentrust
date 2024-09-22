@@ -1,6 +1,16 @@
 package sparse
 
-import "sort"
+import (
+	"context"
+	"fmt"
+	"io"
+	"sort"
+	"strconv"
+
+	"k3l.io/go-eigentrust/pkg/peer"
+	spopt "k3l.io/go-eigentrust/pkg/sparse/option"
+	"k3l.io/go-eigentrust/pkg/util"
+)
 
 // Entry is an entry in a sparse vector or matrix.
 type Entry struct {
@@ -11,6 +21,48 @@ type Entry struct {
 
 	// Value is the entry value.  For sparse use, it should be nonzero.
 	Value float64
+}
+
+func SendEntriesFromCSV(
+	ctx context.Context, r util.CSVReader, ch chan<- Entry,
+	opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	header, err := r.Read()
+	if err != nil {
+		return err
+	}
+	xt, err := util.NewCSVFieldExtractor(header, o.Row.Name, o.Value.Name)
+	if err != nil {
+		return err
+	}
+	for fields, err := r.Read(); err != io.EOF; fields, err = r.Read() {
+		if err != nil {
+			return err
+		}
+		iv, err := xt.ExtractAll(fields)
+		if err != nil {
+			return err
+		}
+		index, err := peer.ParseId(iv[0], o.Row.PeerMap, o.Row.Alloc)
+		if err != nil {
+			return fmt.Errorf("invalid peer id %#v: %w", iv[0], err)
+		}
+		value, err := strconv.ParseFloat(iv[1], 64)
+		if err == nil && value < 0 && !o.Value.AllowNegative {
+			err = NegativeValueError{value}
+		}
+		if err != nil {
+			return fmt.Errorf("invalid value %#v: %w", iv[1], err)
+		}
+		coo := Entry{index, value}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ch <- coo:
+		}
+	}
+	return nil
 }
 
 // CooEntry is a sparse matrix coordinate-format ("Coo") entry.
@@ -78,4 +130,51 @@ func (a EntriesByValue) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func SortEntriesByValue(entries []Entry) []Entry {
 	sort.Sort(EntriesByValue(entries))
 	return entries
+}
+
+func SendCooEntriesFromCSV(
+	ctx context.Context, r util.CSVReader, ch chan<- CooEntry,
+	opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	header, err := r.Read()
+	if err != nil {
+		return err
+	}
+	xt, err := util.NewCSVFieldExtractor(header,
+		o.Row.Name, o.Column.Name, o.Value.Name)
+	if err != nil {
+		return err
+	}
+	for fields, err := r.Read(); err != io.EOF; fields, err = r.Read() {
+		if err != nil {
+			return err
+		}
+		ijv, err := xt.ExtractAll(fields)
+		if err != nil {
+			return err
+		}
+		row, err := peer.ParseId(ijv[0], o.Row.PeerMap, o.Row.Alloc)
+		if err != nil {
+			return fmt.Errorf("invalid row id %#v: %w", ijv[0], err)
+		}
+		column, err := peer.ParseId(ijv[1], o.Column.PeerMap, o.Column.Alloc)
+		if err != nil {
+			return fmt.Errorf("invalid column id %#v: %w", ijv[1], err)
+		}
+		value, err := strconv.ParseFloat(ijv[2], 64)
+		if err == nil && value < 0 && !o.Value.AllowNegative {
+			err = NegativeValueError{value}
+		}
+		if err != nil {
+			return fmt.Errorf("invalid value %#v: %w", ijv[2], err)
+		}
+		coo := CooEntry{row, column, value}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ch <- coo:
+		}
+	}
+	return nil
 }

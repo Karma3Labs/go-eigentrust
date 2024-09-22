@@ -6,10 +6,14 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"syscall"
 	"unsafe"
 
 	"github.com/rs/zerolog"
+	"k3l.io/go-eigentrust/pkg/peer"
+	spopt "k3l.io/go-eigentrust/pkg/sparse/option"
+	"k3l.io/go-eigentrust/pkg/util"
 )
 
 // CSMatrix is a compressed sparse matrix.
@@ -20,6 +24,115 @@ type CSMatrix struct {
 	MajorDim, MinorDim int
 	Entries            [][]Entry
 	mapped             []byte
+}
+
+// NewCSMatrixFromEntries creates a new compressed sparse matrix
+// with the given entries.
+func NewCSMatrixFromEntries(
+	ctx context.Context, entries []CooEntry, opts ...spopt.Option,
+) (*CSMatrix, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan CooEntry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- util.SendElements(ctx, entries, ch)
+	}()
+	m, err := NewCSMatrixFromEntryCh(ctx, ch, opts...)
+	if err == nil {
+		err = util.ErrFromCh(ctx, sendErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// NewCSMatrixFromEntryCh creates a new compressed sparse matrix
+// with the entries taken from a channel.
+func NewCSMatrixFromEntryCh(
+	ctx context.Context, ch <-chan CooEntry, opts ...spopt.Option,
+) (*CSMatrix, error) {
+	o := spopt.New(opts...)
+	majorAxis, minorAxis := o.MajorMinorAxes()
+	majMinFromRowCol := o.MajMinFromRowCol()
+	m := &CSMatrix{
+		MajorDim: majorAxis.Dim,
+		MinorDim: minorAxis.Dim,
+		Entries:  make([][]Entry, majorAxis.Dim),
+	}
+EntryLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case e, ok := <-ch:
+			switch {
+			case !ok:
+				break EntryLoop
+			case e.Value == 0 && !o.Value.IncludeZero:
+				continue EntryLoop
+			case e.Value < 0 && !o.Value.AllowNegative:
+				return nil, NegativeValueError{e.Value}
+			}
+			major, minor := majMinFromRowCol(e.Row, e.Column)
+			if major >= m.MajorDim {
+				if !majorAxis.Grow {
+					return nil, util.IndexOutOfBoundsError{
+						Index: major, Bound: m.MajorDim,
+					}
+				}
+				m.SetMajorDim(major + 1)
+			}
+			if minor >= m.MinorDim {
+				if !minorAxis.Grow {
+					return nil, util.IndexOutOfBoundsError{
+						Index: minor, Bound: m.MinorDim,
+					}
+				}
+				m.SetMinorDim(minor + 1)
+			}
+			m.Entries[major] = append(m.Entries[major], Entry{
+				Index: minor,
+				Value: e.Value,
+			})
+		}
+	}
+	for major, span := range m.Entries {
+		sort.Sort(EntriesByIndex(span))
+		m.Entries[major] = util.ShrinkWrap(span)
+	}
+	m.Entries = util.ShrinkWrap(m.Entries)
+	runtime.SetFinalizer(m, (*CSMatrix).finalize)
+	return m, nil
+}
+
+// NewCSMatrixFromCSV creates a new compressed sparse row matrix
+// with the given dimension and entries.
+//
+// The first CSV row is treated as the header row.
+func NewCSMatrixFromCSV(
+	ctx context.Context, r util.CSVReader, opts ...spopt.Option,
+) (*CSMatrix, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan CooEntry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- SendCooEntriesFromCSV(ctx, r, ch, opts...)
+	}()
+	m, err := NewCSMatrixFromEntryCh(ctx, ch, opts...)
+	if err == nil {
+		err = util.ErrFromCh(ctx, sendErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // Reset resets the receiver to be empty (0x0).
@@ -44,9 +157,7 @@ func (m *CSMatrix) Dim() (int, error) {
 // SetMajorDim grows/shrinks the receiver in-place,
 // so it matches the given major dimension.
 func (m *CSMatrix) SetMajorDim(dim int) {
-	if cap(m.Entries) < dim {
-		m.Entries = append(make([][]Entry, 0, dim), m.Entries...)
-	}
+	m.Entries = util.GrowCap(m.Entries, dim)
 	m.Entries = m.Entries[:dim]
 	m.MajorDim = dim
 }
@@ -318,6 +429,96 @@ func (m *CSMatrix) finalize() {
 	}
 }
 
+// SendCooEntries sends all coordinate-format entries into a channel.
+func (m *CSMatrix) SendCooEntries(
+	ctx context.Context, ch chan<- CooEntry, opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	rowColFromMajMin := spopt.New(opts...).RowColFromMajMin()
+	for major, span := range m.Entries {
+		for _, entry := range span {
+			row, col := rowColFromMajMin(major, entry.Index)
+			if entry.Value == 0 && !o.Value.IncludeZero {
+				continue
+			}
+			coo := CooEntry{Row: row, Column: col, Value: entry.Value}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- coo:
+			}
+		}
+	}
+	return nil
+}
+
+// CooEntries returns all coordinate-format entries.
+func (m *CSMatrix) CooEntries(
+	ctx context.Context, opts ...spopt.Option,
+) ([]CooEntry, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan CooEntry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- m.SendCooEntries(ctx, ch, opts...)
+	}()
+	entries, err := util.ReceiveElements(ctx, ch)
+	if err == nil {
+		err = util.ErrFromCh(ctx, sendErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// WriteIntoCSV writes all entries into a CSV.
+func (m *CSMatrix) WriteIntoCSV(
+	ctx context.Context, w util.CSVWriter, opts ...spopt.Option,
+) error {
+	o := spopt.New(opts...)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	err := w.Write([]string{o.Row.Name, o.Column.Name, o.Value.Name})
+	if err != nil {
+		return err
+	}
+	ch := make(chan CooEntry)
+	sendErr := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(sendErr)
+		sendErr <- m.SendCooEntries(ctx, ch, opts...)
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case coo, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			var i, j, v string
+			i, err = peer.GetId(coo.Row, o.Row.PeerMap)
+			if err != nil {
+				return err
+			}
+			j, err = peer.GetId(coo.Column, o.Column.PeerMap)
+			if err != nil {
+				return err
+			}
+			v = strconv.FormatFloat(coo.Value, 'f', -1, 64)
+			err = w.Write([]string{i, j, v})
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // CSRMatrix is a compressed sparse row matrix.
 type CSRMatrix struct {
 	CSMatrix
@@ -330,31 +531,45 @@ type CSRMatrix struct {
 func NewCSRMatrix(
 	rows, cols int, entries []CooEntry, includeZero bool,
 ) *CSRMatrix {
-	var entries2 [][]Entry
-	if rows != 0 {
-		entries2 = make([][]Entry, rows)
+	return util.Must(NewCSRMatrixFromEntries(context.TODO(), entries,
+		spopt.FixedDim(rows, cols),
+		spopt.IncludeZeroSetTo(includeZero)))
+}
+
+func cs2csr(m *CSMatrix, err error) (*CSRMatrix, error) {
+	if err != nil {
+		return nil, err
 	}
-	for _, e := range entries {
-		if e.Value == 0 && !includeZero {
-			continue
-		}
-		entries2[e.Row] = append(entries2[e.Row], Entry{
-			Index: e.Column,
-			Value: e.Value,
-		})
-	}
-	for _, row := range entries2 {
-		sort.Sort(EntriesByIndex(row))
-	}
-	m := &CSRMatrix{
-		CSMatrix{
-			MajorDim: rows,
-			MinorDim: cols,
-			Entries:  entries2,
-		},
-	}
-	runtime.SetFinalizer(&m.CSMatrix, (*CSMatrix).finalize)
-	return m
+	return &CSRMatrix{CSMatrix: *m}, nil
+}
+
+// NewCSRMatrixFromEntries creates a new compressed sparse row matrix
+// with the given entries.
+func NewCSRMatrixFromEntries(
+	ctx context.Context, entries []CooEntry, opts ...spopt.Option,
+) (*CSRMatrix, error) {
+	opts = append(opts, spopt.RowMajor)
+	return cs2csr(NewCSMatrixFromEntries(ctx, entries, opts...))
+}
+
+// NewCSRMatrixFromEntryCh creates a new compressed sparse row matrix
+// with the entries taken from a channel.
+func NewCSRMatrixFromEntryCh(
+	ctx context.Context, ch <-chan CooEntry, opts ...spopt.Option,
+) (*CSRMatrix, error) {
+	opts = append(opts, spopt.RowMajor)
+	return cs2csr(NewCSMatrixFromEntryCh(ctx, ch, opts...))
+}
+
+// NewCSRMatrixFromCSV creates a new compressed sparse row matrix
+// with the given dimension and entries.
+//
+// The first CSV row is treated as the header row.
+func NewCSRMatrixFromCSV(
+	ctx context.Context, r util.CSVReader, opts ...spopt.Option,
+) (*CSRMatrix, error) {
+	opts = append(opts, spopt.RowMajor)
+	return cs2csr(NewCSMatrixFromCSV(ctx, r, opts...))
 }
 
 // Dims returns the numbers of rows/columns.
@@ -405,6 +620,30 @@ func (m *CSRMatrix) TransposeToCSC() *CSCMatrix {
 	}
 }
 
+// SendCooEntries yields all entries of a compressed sparse-row matrix.
+func (m *CSRMatrix) SendCooEntries(
+	ctx context.Context, ch chan<- CooEntry, opts ...spopt.Option,
+) error {
+	opts = append(opts, spopt.RowMajor)
+	return m.CSMatrix.SendCooEntries(ctx, ch, opts...)
+}
+
+// CooEntries returns all coordinate-format entries.
+func (m *CSRMatrix) CooEntries(
+	ctx context.Context, opts ...spopt.Option,
+) ([]CooEntry, error) {
+	opts = append(opts, spopt.RowMajor)
+	return m.CSMatrix.CooEntries(ctx, opts...)
+}
+
+// WriteIntoCSV writes all entries into a CSV.
+func (m *CSRMatrix) WriteIntoCSV(
+	ctx context.Context, w util.CSVWriter, opts ...spopt.Option,
+) error {
+	opts = append(opts, spopt.RowMajor)
+	return m.CSMatrix.WriteIntoCSV(ctx, w, opts...)
+}
+
 // CSCMatrix is a compressed sparse column matrix.
 type CSCMatrix struct {
 	CSMatrix
@@ -450,6 +689,30 @@ func (m *CSCMatrix) TransposeToCSR() *CSRMatrix {
 			Entries:  m.Entries,
 		},
 	}
+}
+
+// SendCooEntries yields all entries of a compressed sparse-row matrix.
+func (m *CSCMatrix) SendCooEntries(
+	ctx context.Context, ch chan<- CooEntry, opts ...spopt.Option,
+) error {
+	opts = append(opts, spopt.ColumnMajor)
+	return m.CSMatrix.SendCooEntries(ctx, ch, opts...)
+}
+
+// CooEntries returns all coordinate-format entries.
+func (m *CSCMatrix) CooEntries(
+	ctx context.Context, opts ...spopt.Option,
+) ([]CooEntry, error) {
+	opts = append(opts, spopt.ColumnMajor)
+	return m.CSMatrix.CooEntries(ctx, opts...)
+}
+
+// WriteIntoCSV writes all entries into a CSV.
+func (m *CSCMatrix) WriteIntoCSV(
+	ctx context.Context, w util.CSVWriter, opts ...spopt.Option,
+) error {
+	opts = append(opts, spopt.ColumnMajor)
+	return m.CSMatrix.WriteIntoCSV(ctx, w, opts...)
 }
 
 // Matrix is just an alias of CSRMatrix,
