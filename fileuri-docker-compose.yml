@@ -1,19 +1,4 @@
 services:
-  go-eigentrust-8081:
-    build: 
-      dockerfile: fileuri.Dockerfile
-    image: go-eigentrust:latest
-    deploy:
-      resources:
-        limits:
-          memory: 100gb
-    restart: on-failure:3
-    container_name: go-eigentrust-8081
-    volumes:
-      - ${GO_EIGENTRUST_BIND_SRC}:${GO_EIGENTRUST_BIND_TARGET}:z
-    ports:
-      - "8081:80"
-
   go-eigentrust-9081:
     build: 
       dockerfile: fileuri.Dockerfile
@@ -21,7 +6,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 100gb
+          memory: 90gb
     restart: on-failure:3
     container_name: go-eigentrust-9081
     volumes:
