@@ -217,17 +217,23 @@ func (svr *StrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
 
+	req := request.Body
+
 	PrintMemStats()
 	runtime.GC()
 	debug.FreeOSMemory()
 	PrintMemStats()
 
-	req := request.Body
-
 	tv, _, err := svr.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
 		req.FlatTail, req.NumLeaders,
 		req.MaxIterations, req.MinIterations, req.CheckFreq)
+
+	PrintMemStats()
+	runtime.GC()
+	debug.FreeOSMemory()
+	PrintMemStats()
+
 	if err != nil {
 		var httpError server.HTTPError
 		if errors.As(err, &httpError) {

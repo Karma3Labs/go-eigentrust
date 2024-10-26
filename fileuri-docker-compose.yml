@@ -3,6 +3,10 @@ services:
     build: 
       dockerfile: fileuri.Dockerfile
     image: go-eigentrust:latest
+    deploy:
+      resources:
+        limits:
+          memory: 100gb
     restart: on-failure:3
     container_name: go-eigentrust-8081
     volumes:
@@ -14,6 +18,10 @@ services:
     build: 
       dockerfile: fileuri.Dockerfile
     image: go-eigentrust:latest
+    deploy:
+      resources:
+        limits:
+          memory: 100gb
     restart: on-failure:3
     container_name: go-eigentrust-9081
     volumes:
