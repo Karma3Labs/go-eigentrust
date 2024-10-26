@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -215,6 +216,12 @@ func (svr *StrictServerImpl) compute(
 func (svr *StrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
+
+	PrintMemStats()
+	runtime.GC()
+	debug.FreeOSMemory()
+	PrintMemStats()
+
 	req := request.Body
 
 	tv, _, err := svr.compute(ctx,
@@ -664,4 +671,14 @@ func (svr *StrictServerImpl) loadCsvTrustVector(
 		entries = append(entries, sparse.Entry{Index: i, Value: v})
 	}
 	return sparse.NewVector(size, entries), nil
+}
+
+func PrintMemStats() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	println("Heap Alloc:", m.HeapAlloc)
+	println("Heap Sys:", m.HeapSys)
+	println("Heap Objects:", m.HeapObjects)
+	println("GC Cycles:", m.NumGC)
 }
