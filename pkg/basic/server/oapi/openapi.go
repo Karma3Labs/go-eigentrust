@@ -158,10 +158,20 @@ func (svr *StrictServerImpl) compute(
 	if checkFreq != nil {
 		opts = append(opts, basic.WithCheckFreq(*checkFreq))
 	}
+
+	logger.Trace().
+		Int("dim", p.Dim).
+		Int("nnz", p.NNZ()).
+		Msg("before CanonicalizeTrustVector")
 	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
 		basic.CanonicalizeTrustVector(t0)
 	}
+	logger.Trace().
+		Int("dim", p.Dim).
+		Int("nnz", p.NNZ()).
+		Msg("after CanonicalizeTrustVector")
+
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
 		err = server.HTTPError{
@@ -169,6 +179,11 @@ func (svr *StrictServerImpl) compute(
 		}
 		return
 	}
+
+	logger.Trace().
+		Int("dim", cDim).
+		Int("nnz", c.NNZ()).
+		Msg("before CanonicalizeTrustVector")
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = server.HTTPError{
@@ -177,6 +192,11 @@ func (svr *StrictServerImpl) compute(
 		}
 		return
 	}
+	logger.Trace().
+		Int("dim", cDim).
+		Int("nnz", c.NNZ()).
+		Msg("after CanonicalizeTrustVector")
+
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = server.HTTPError{
