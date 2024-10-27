@@ -1,15 +1,24 @@
 services:
-  go-eigentrust-9081:
+  go-eigentrust:
     build: 
       dockerfile: fileuri.Dockerfile
     image: go-eigentrust:latest
     deploy:
+      mode: replicated
+      replicas: 2
       resources:
         limits:
-          memory: 90gb
+          memory: 50gb
     restart: on-failure:3
-    container_name: go-eigentrust-9081
     volumes:
       - ${GO_EIGENTRUST_BIND_SRC}:${GO_EIGENTRUST_BIND_TARGET}:z
+    expose:
+      - '8000'
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./fileuri.nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - go-eigentrust
     ports:
-      - "9081:80"
+      - "8081:8081"
