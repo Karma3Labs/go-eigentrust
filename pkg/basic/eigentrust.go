@@ -215,14 +215,22 @@ func Compute(
 	if t0 == nil {
 		t0 = p
 	}
+	logger.Debug().Msg("before t0 clone")
 	t1 := t0.Clone()
+	logger.Debug().Msg("after t0 clone")
 
+	logger.Debug().Msg("before c transpose")
 	ct, err := c.Transpose(ctx)
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug().Msg("after c transpose")
+
 	ap := &sparse.Vector{}
+	logger.Debug().Msg("before scale")
 	ap.ScaleVec(a, p)
+	logger.Debug().Msg("after scale")
+
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
 	checkFreq := 1
@@ -256,6 +264,7 @@ func Compute(
 	// hard-cap at maxIters
 	iter := 0
 	for ; iter < maxIters; iter++ {
+		logger.Debug().Uint("iter", uint(iter)).Msg("start iteration")
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

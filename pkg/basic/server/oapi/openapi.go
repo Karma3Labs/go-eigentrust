@@ -162,7 +162,7 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
-		Msg("before CanonicalizeTrustVector")
+		Msg("before CanonicalizeTrustVector p")
 	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
 		basic.CanonicalizeTrustVector(t0)
@@ -170,7 +170,7 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
-		Msg("after CanonicalizeTrustVector")
+		Msg("after CanonicalizeTrustVector p")
 
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
@@ -183,7 +183,7 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
-		Msg("before CanonicalizeTrustVector")
+		Msg("before CanonicalizeTrustVector c,p")
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = server.HTTPError{
@@ -195,8 +195,16 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
-		Msg("after CanonicalizeTrustVector")
+		Msg("after CanonicalizeTrustVector c,p")
 
+	dDim, err := c.Dim()
+	if err != nil {
+		return
+	}
+	logger.Trace().
+		Int("dim", dDim).
+		Int("nnz", discounts.NNZ()).
+		Msg("before CanonicalizeTrustVector discounts")
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = server.HTTPError{
@@ -205,6 +213,11 @@ func (svr *StrictServerImpl) compute(
 		}
 		return
 	}
+	logger.Trace().
+		Int("dim", dDim).
+		Int("nnz", discounts.NNZ()).
+		Msg("after CanonicalizeTrustVector discounts")
+
 	t, err := basic.Compute(ctx, c, p, *alpha, *epsilon, opts...)
 	c = nil
 	p = nil
