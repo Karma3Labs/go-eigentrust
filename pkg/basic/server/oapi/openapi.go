@@ -78,6 +78,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
+	PrintMemStats()
 	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
@@ -100,6 +101,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
+	PrintMemStats()
 	if initialTrust == nil {
 		t0 = nil
 	} else if t0, err = svr.loadTrustVector(ctx, initialTrust); err != nil {
@@ -163,6 +165,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("before CanonicalizeTrustVector p")
+	PrintMemStats()
 	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
 		basic.CanonicalizeTrustVector(t0)
@@ -171,6 +174,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("after CanonicalizeTrustVector p")
+	PrintMemStats()
 
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
@@ -184,6 +188,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("before CanonicalizeTrustVector c,p")
+	PrintMemStats()
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = server.HTTPError{
@@ -196,6 +201,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("after CanonicalizeTrustVector c,p")
+	PrintMemStats()
 
 	dDim, err := c.Dim()
 	if err != nil {
@@ -205,6 +211,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
 		Msg("before CanonicalizeTrustVector discounts")
+	PrintMemStats()
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = server.HTTPError{
@@ -217,6 +224,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
 		Msg("after CanonicalizeTrustVector discounts")
+	PrintMemStats()
 
 	t, err := basic.Compute(ctx, c, p, *alpha, *epsilon, opts...)
 	c = nil
@@ -697,4 +705,14 @@ func (svr *StrictServerImpl) loadCsvTrustVector(
 		entries = append(entries, sparse.Entry{Index: i, Value: v})
 	}
 	return sparse.NewVector(size, entries), nil
+}
+
+func PrintMemStats() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	println("Heap Alloc:", m.HeapAlloc)
+	println("Heap Sys:", m.HeapSys)
+	println("Heap Objects:", m.HeapObjects)
+	println("GC Cycles:", m.NumGC)
 }

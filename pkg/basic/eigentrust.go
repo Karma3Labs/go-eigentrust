@@ -216,20 +216,26 @@ func Compute(
 		t0 = p
 	}
 	logger.Debug().Msg("before t0 clone")
+	PrintMemStats()
 	t1 := t0.Clone()
 	logger.Debug().Msg("after t0 clone")
+	PrintMemStats()
 
 	logger.Debug().Msg("before c transpose")
+	PrintMemStats()
 	ct, err := c.Transpose(ctx)
 	if err != nil {
 		return nil, err
 	}
 	logger.Debug().Msg("after c transpose")
+	PrintMemStats()
 
 	ap := &sparse.Vector{}
 	logger.Debug().Msg("before scale")
+	PrintMemStats()
 	ap.ScaleVec(a, p)
 	logger.Debug().Msg("after scale")
+	PrintMemStats()
 
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
@@ -265,6 +271,7 @@ func Compute(
 	iter := 0
 	for ; iter < maxIters; iter++ {
 		logger.Debug().Uint("iter", uint(iter)).Msg("start iteration")
+		PrintMemStats()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -369,4 +376,14 @@ DiscountsLoop:
 		i1++
 	}
 	return nil
+}
+
+func PrintMemStats() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	println("Heap Alloc:", m.HeapAlloc)
+	println("Heap Sys:", m.HeapSys)
+	println("Heap Objects:", m.HeapObjects)
+	println("GC Cycles:", m.NumGC)
 }
