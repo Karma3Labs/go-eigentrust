@@ -185,9 +185,10 @@ func (svr *StrictServerImpl) compute(
 	}
 
 	logger.Trace().
-		Int("dim", cDim).
+		Int("MajorDim", c.MajorDim).
+		Int("MinorDim", c.MinorDim).
 		Int("nnz", c.NNZ()).
-		Msg("before CanonicalizeTrustVector c,p")
+		Msg("before CanonicalizeLocalTrust c,p")
 	PrintMemStats()
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
@@ -198,9 +199,10 @@ func (svr *StrictServerImpl) compute(
 		return
 	}
 	logger.Trace().
-		Int("dim", cDim).
+		Int("MajorDim", c.MajorDim).
+		Int("MinorDim", c.MinorDim).
 		Int("nnz", c.NNZ()).
-		Msg("after CanonicalizeTrustVector c,p")
+		Msg("after CanonicalizeLocalTrust c,p")
 	PrintMemStats()
 
 	dDim, err := c.Dim()
@@ -210,7 +212,7 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
-		Msg("before CanonicalizeTrustVector discounts")
+		Msg("before CanonicalizeLocalTrust discounts")
 	PrintMemStats()
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
@@ -223,7 +225,7 @@ func (svr *StrictServerImpl) compute(
 	logger.Trace().
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
-		Msg("after CanonicalizeTrustVector discounts")
+		Msg("after CanonicalizeLocalTrust discounts")
 	PrintMemStats()
 
 	t, err := basic.Compute(ctx, c, p, *alpha, *epsilon, opts...)
@@ -257,6 +259,8 @@ func (svr *StrictServerImpl) Compute(
 	ctx context.Context, request openapi.ComputeRequestObject,
 ) (openapi.ComputeResponseObject, error) {
 	req := request.Body
+	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
+	logger.Trace().Str("req", fmt.Sprintf("%+v", req)).Msg("Compute")
 
 	tv, _, err := svr.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
