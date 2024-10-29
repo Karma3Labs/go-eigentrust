@@ -13,6 +13,11 @@ services:
     build: 
       dockerfile: fileuri.Dockerfile
     image: go-eigentrust:latest
+    deploy:
+      resources:
+        limits:
+          memory: 50gb
+    restart: on-failure:3
     container_name: go-eigentrust-9081
     volumes:
       - ${GO_EIGENTRUST_BIND_SRC}:${GO_EIGENTRUST_BIND_TARGET}:z
