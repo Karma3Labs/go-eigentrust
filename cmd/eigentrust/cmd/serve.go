@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -75,38 +74,7 @@ var (
 	}
 )
 
-func initLogger() {
-	// Get log level from environment variable, default to "info" if not set
-	logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
-
-	// Convert string to zerolog level
-	var level zerolog.Level
-	switch logLevel {
-	case "debug":
-		level = zerolog.DebugLevel
-	case "info":
-		level = zerolog.InfoLevel
-	case "warn":
-		level = zerolog.WarnLevel
-	case "error":
-		level = zerolog.ErrorLevel
-	case "fatal":
-		level = zerolog.FatalLevel
-	case "panic":
-		level = zerolog.PanicLevel
-	case "trace":
-		level = zerolog.TraceLevel
-	default:
-		level = zerolog.TraceLevel
-	}
-
-	// Set global log level
-	zerolog.SetGlobalLevel(level)
-
-}
-
 func init() {
-	initLogger()
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.PersistentFlags().StringVar(&listenAddress, "listen_address",
 		"", `server listen address to bind to

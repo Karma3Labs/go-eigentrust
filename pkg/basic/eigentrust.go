@@ -72,7 +72,7 @@ func (c *ConvergenceChecker) Update(t *sparse.Vector) error {
 		return err
 	}
 	d := td.Norm2()
-	c.logger.Trace().
+	c.logger.Debug().
 		Int("iteration", c.iter).
 		Float64("log10dPace", math.Log10(d/c.d)).
 		Float64("log10dRemaining", math.Log10(d/c.e)).
@@ -316,7 +316,7 @@ func Compute(
 		Dur("durIter", durIter).
 		Msg("finished")
 	flatTailStats := flatTailChecker.Stats()
-	logger.Trace().
+	logger.Debug().
 		Int("length", flatTailStats.Length).
 		Int("threshold", flatTailStats.Threshold).
 		Float64("deltaNorm", flatTailStats.DeltaNorm).

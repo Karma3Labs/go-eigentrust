@@ -16,7 +16,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 50gb
+          memory: 80gb
     restart: on-failure:3
     container_name: go-eigentrust-9081
     volumes:

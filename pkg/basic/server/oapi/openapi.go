@@ -74,7 +74,7 @@ func (svr *StrictServerImpl) compute(
 	if err != nil {
 		return
 	}
-	logger.Trace().
+	logger.Debug().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
@@ -97,7 +97,7 @@ func (svr *StrictServerImpl) compute(
 			c.SetDim(p.Dim, p.Dim)
 		}
 	}
-	logger.Trace().
+	logger.Debug().
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
@@ -119,7 +119,7 @@ func (svr *StrictServerImpl) compute(
 			c.SetDim(t0.Dim, t0.Dim)
 			p.SetDim(t0.Dim)
 		}
-		logger.Trace().
+		logger.Debug().
 			Int("dim", t0.Dim).
 			Int("nnz", t0.NNZ()).
 			Msg("initial trust loaded")
@@ -260,7 +260,7 @@ func (svr *StrictServerImpl) Compute(
 ) (openapi.ComputeResponseObject, error) {
 	req := request.Body
 	logger := util.LoggerWithCaller(*zerolog.Ctx(ctx))
-	logger.Trace().Str("req", fmt.Sprintf("%+v", req)).Msg("Compute")
+	logger.Trace().Msg("Compute request body read")
 
 	tv, _, err := svr.compute(ctx,
 		&req.LocalTrust, req.InitialTrust, req.PreTrust, req.Alpha, req.Epsilon,
@@ -389,7 +389,7 @@ func (svr *StrictServerImpl) UpdateLocalTrust(
 	if err != nil {
 		return nil, fmt.Errorf("cannot get dimension: %w", err)
 	}
-	logger.Trace().
+	logger.Debug().
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
