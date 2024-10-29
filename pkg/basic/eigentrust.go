@@ -215,27 +215,27 @@ func Compute(
 	if t0 == nil {
 		t0 = p
 	}
-	logger.Debug().Msg("before t0 clone")
-	PrintMemStats()
+	logger.Trace().Msg("before t0 clone")
+	PrintMemStats(logger)
 	t1 := t0.Clone()
-	logger.Debug().Msg("after t0 clone")
-	PrintMemStats()
+	logger.Trace().Msg("after t0 clone")
+	PrintMemStats(logger)
 
-	logger.Debug().Msg("before c transpose")
-	PrintMemStats()
+	logger.Trace().Msg("before c transpose")
+	PrintMemStats(logger)
 	ct, err := c.Transpose(ctx)
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug().Msg("after c transpose")
-	PrintMemStats()
+	logger.Trace().Msg("after c transpose")
+	PrintMemStats(logger)
 
 	ap := &sparse.Vector{}
-	logger.Debug().Msg("before scale")
-	PrintMemStats()
+	logger.Trace().Msg("before scale")
+	PrintMemStats(logger)
 	ap.ScaleVec(a, p)
-	logger.Debug().Msg("after scale")
-	PrintMemStats()
+	logger.Trace().Msg("after scale")
+	PrintMemStats(logger)
 
 	tm1 := time.Now()
 	durPrep, tm0 := tm1.Sub(tm0), tm1
@@ -270,8 +270,8 @@ func Compute(
 	// hard-cap at maxIters
 	iter := 0
 	for ; iter < maxIters; iter++ {
-		logger.Debug().Uint("iter", uint(iter)).Msg("start iteration")
-		PrintMemStats()
+		logger.Trace().Uint("iter", uint(iter)).Msg("start iteration")
+		PrintMemStats(logger)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -378,12 +378,16 @@ DiscountsLoop:
 	return nil
 }
 
-func PrintMemStats() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+func PrintMemStats(logger *zerolog.Logger) {
+	if logger.Trace().Enabled() {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
 
-	println("Heap Alloc:", m.HeapAlloc)
-	println("Heap Sys:", m.HeapSys)
-	println("Heap Objects:", m.HeapObjects)
-	println("GC Cycles:", m.NumGC)
+		logger.Trace().
+			Uint64("Heap Alloc:", m.HeapAlloc).
+			Uint64("Heap Sys:", m.HeapSys).
+			Uint64("Heap Objects:", m.HeapObjects).
+			Uint32("GC Cycles:", m.NumGC).
+			Msg("MemStats")
+	}
 }

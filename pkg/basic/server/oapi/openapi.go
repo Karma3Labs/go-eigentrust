@@ -78,7 +78,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", cDim).
 		Int("nnz", c.NNZ()).
 		Msg("local trust loaded")
-	PrintMemStats()
+	PrintMemStats(logger)
 	if preTrust == nil {
 		// Default to zero pre-trust (canonicalized into uniform later).
 		p = sparse.NewVector(cDim, nil)
@@ -101,7 +101,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("pre-trust loaded")
-	PrintMemStats()
+	PrintMemStats(logger)
 	if initialTrust == nil {
 		t0 = nil
 	} else if t0, err = svr.loadTrustVector(ctx, initialTrust); err != nil {
@@ -165,7 +165,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("before CanonicalizeTrustVector p")
-	PrintMemStats()
+	PrintMemStats(logger)
 	basic.CanonicalizeTrustVector(p)
 	if t0 != nil {
 		basic.CanonicalizeTrustVector(t0)
@@ -174,7 +174,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", p.Dim).
 		Int("nnz", p.NNZ()).
 		Msg("after CanonicalizeTrustVector p")
-	PrintMemStats()
+	PrintMemStats(logger)
 
 	discounts, err := basic.ExtractDistrust(c)
 	if err != nil {
@@ -189,7 +189,7 @@ func (svr *StrictServerImpl) compute(
 		Int("MinorDim", c.MinorDim).
 		Int("nnz", c.NNZ()).
 		Msg("before CanonicalizeLocalTrust c,p")
-	PrintMemStats()
+	PrintMemStats(logger)
 	err = basic.CanonicalizeLocalTrust(c, p)
 	if err != nil {
 		err = server.HTTPError{
@@ -203,7 +203,7 @@ func (svr *StrictServerImpl) compute(
 		Int("MinorDim", c.MinorDim).
 		Int("nnz", c.NNZ()).
 		Msg("after CanonicalizeLocalTrust c,p")
-	PrintMemStats()
+	PrintMemStats(logger)
 
 	dDim, err := c.Dim()
 	if err != nil {
@@ -213,7 +213,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
 		Msg("before CanonicalizeLocalTrust discounts")
-	PrintMemStats()
+	PrintMemStats(logger)
 	err = basic.CanonicalizeLocalTrust(discounts, nil)
 	if err != nil {
 		err = server.HTTPError{
@@ -226,7 +226,7 @@ func (svr *StrictServerImpl) compute(
 		Int("dim", dDim).
 		Int("nnz", discounts.NNZ()).
 		Msg("after CanonicalizeLocalTrust discounts")
-	PrintMemStats()
+	PrintMemStats(logger)
 
 	t, err := basic.Compute(ctx, c, p, *alpha, *epsilon, opts...)
 	c = nil
@@ -711,12 +711,16 @@ func (svr *StrictServerImpl) loadCsvTrustVector(
 	return sparse.NewVector(size, entries), nil
 }
 
-func PrintMemStats() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+func PrintMemStats(logger zerolog.Logger) {
+	if logger.Trace().Enabled() {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
 
-	println("Heap Alloc:", m.HeapAlloc)
-	println("Heap Sys:", m.HeapSys)
-	println("Heap Objects:", m.HeapObjects)
-	println("GC Cycles:", m.NumGC)
+		logger.Trace().
+			Uint64("Heap Alloc:", m.HeapAlloc).
+			Uint64("Heap Sys:", m.HeapSys).
+			Uint64("Heap Objects:", m.HeapObjects).
+			Uint32("GC Cycles:", m.NumGC).
+			Msg("MemStats")
+	}
 }
