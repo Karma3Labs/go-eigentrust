@@ -12,6 +12,7 @@ package tools
 
 import (
 	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	_ "github.com/ogen-go/ogen/cmd/ogen"
 	_ "github.com/yoheimuta/protolint/cmd/protolint"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"

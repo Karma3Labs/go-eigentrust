@@ -23,3 +23,7 @@ index ae14eb4..4e00e54 100644
  type Compute400JSONResponse struct{ InvalidRequestJSONResponse }
 ENDEND
 git grep -l '^//go:generate ' -- '*.go' | sed -n 's:/[^/]*$::p' | sort -u | tr \\n \\0 | xargs -0 goimports -w
+
+# Generate ogen code
+echo "Generating ogen code..."
+(cd pkg/api/ogen && go generate)

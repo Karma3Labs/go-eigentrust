@@ -137,3 +137,6 @@ __pycache__/
 # patch(1) byproducts
 *.orig
 *.rej
+
+# Built binaries
+/eigentrust

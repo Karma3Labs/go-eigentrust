@@ -211,6 +211,7 @@ func (svr *StrictServerImpl) compute(
 		err = fmt.Errorf("cannot create response: %w", err)
 		return
 	}
+	tv.Scheme = openapi.Inline
 	itv2, err := tv.AsInlineTrustRef()
 	itv2.Entries = itv.Entries[:0]
 	return tv, flatTailStats, nil

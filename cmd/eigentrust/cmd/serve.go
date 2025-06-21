@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/labstack/echo/v4"
@@ -10,8 +11,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/ziflex/lecho/v3"
+	"k3l.io/go-eigentrust/pkg/api/ogen"
 	"k3l.io/go-eigentrust/pkg/api/openapi"
 	oapiserver "k3l.io/go-eigentrust/pkg/basic/server/oapi"
+	ogenserver "k3l.io/go-eigentrust/pkg/basic/server/ogen"
 )
 
 var (
@@ -20,6 +23,7 @@ var (
 	certPathname  string
 	keyPathname   string
 	localhost     bool
+	useOgen       bool
 	serveCmd      = &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the EigenTrust API",
@@ -36,17 +40,40 @@ var (
 				middleware.CORS(),
 				lecho.Middleware(lecho.Config{Logger: eLogger, NestKey: "req"}),
 			)
-			server, err := oapiserver.NewStrictServerImpl(ctx)
-			if err != nil {
-				logger.Err(err).Msg("cannot create server implementation")
-				return
-			}
 			if localhost {
 				useFileURI = true
 			}
-			server.UseFileURI = useFileURI
-			openapi.RegisterHandlersWithBaseURL(e,
-				openapi.NewStrictHandler(server, nil), "/basic/v1")
+
+			if useOgen {
+				// Use ogen-generated server
+				logger.Info().Msg("using ogen-generated server")
+				ogenHandler, err := ogenserver.NewHandler(ctx)
+				if err != nil {
+					logger.Err(err).Msg("cannot create ogen handler")
+					return
+				}
+				ogenHandler.SetUseFileURI(useFileURI)
+				
+				// Create ogen server and register handlers
+				ogenServer, err := ogen.NewServer(ogenHandler)
+				if err != nil {
+					logger.Err(err).Msg("cannot create ogen server")
+					return
+				}
+				// Mount ogen server under /basic/v1/ path with prefix stripping
+				e.Any("/basic/v1/*", echo.WrapHandler(http.StripPrefix("/basic/v1", ogenServer)))
+			} else {
+				// Use existing oapi-codegen server
+				logger.Info().Msg("using oapi-codegen server")
+				server, err := oapiserver.NewStrictServerImpl(ctx)
+				if err != nil {
+					logger.Err(err).Msg("cannot create server implementation")
+					return
+				}
+				server.UseFileURI = useFileURI
+				openapi.RegisterHandlersWithBaseURL(e,
+					openapi.NewStrictHandler(server, nil), "/basic/v1")
+			}
 			if listenAddress == "" {
 				addr := ""
 				if localhost {
@@ -62,6 +89,7 @@ var (
 				listenAddress = fmt.Sprintf("%s:%d", addr, port)
 			}
 			zerolog.DefaultContextLogger = &logger
+			var err error
 			if tls {
 				err = e.StartTLS(listenAddress, certPathname, keyPathname)
 			} else {
@@ -89,4 +117,6 @@ func init() {
 		"enable file:// URI based trust matrix/vector loading")
 	serveCmd.PersistentFlags().BoolVarP(&localhost, "localhost", "L", false,
 		"localhost mode: listen on loopback address and enable file:// URI")
+	serveCmd.PersistentFlags().BoolVar(&useOgen, "use-ogen", false,
+		"use ogen-generated server instead of oapi-codegen (experimental)")
 }
