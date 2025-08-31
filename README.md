@@ -150,3 +150,7 @@ if (! $?GOPATH) setenv GOPATH ~/go
 if (! $?GOBIN) setenv GOBIN "${GOPATH}/bin"
 set path = ($path $GOBIN)
 ```
+
+## Acknowledgments
+
+* This project is tested with BrowserStack - https://www.browserstack.com/
